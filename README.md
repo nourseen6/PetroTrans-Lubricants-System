@@ -1,57 +1,57 @@
 # Petro Trans
 
-نظام سطح مكتب عربي لإدارة مبيعات ومخزون وتسويات **بترو ترانس**، موزّع زيوت التشحيم. الشغل اليومي كان متفرّق على ملفات Excel. النظام ده بيجمعه في تطبيق واحد يشتغل على الجهاز من غير إنترنت.
+Arabic-first Windows desktop system for **Petro Trans**, a lubricants distributor. Daily work used to live in separate Excel files. This application puts sales, stock, and customer balances in one program that runs on the machine with no internet.
 
-This is a real operations system for a lubricants distributor, not a sample CRUD app.
+This is a real operations system, not a sample CRUD app.
 
-## ليه المشروع مهم
+## Why it matters
 
-بترو ترانس بتبيع بالآجل: الفاتورة بتتسجل، البضاعة بتخرج، والفلوس بتتحصّل بعد كده. المخزون بيتغير مع كل فاتورة ومشتريات وتسوية. رصيد العميل مش رقم بيتكتب بإيد، ده نتيجة الفواتير والمدفوعات.
+Petro Trans sells on credit. An invoice is recorded, goods leave the warehouse, and the customer pays later. Stock changes with every invoice, purchase, and adjustment. A customer balance is not a number someone types in. It is the result of invoices and payments.
 
-Excel كان بيمشي الشغل، بس كل ملف لوحده: الأسعار في مكان، العملاء في مكان، والمخزون في مكان تالت. غلطة نسخ أو صف اتمسح بتغيّر الرصيد من غير أثر. النظام ده بيقفل الفجوة دي.
+Excel kept the business moving, but each file stood alone: prices in one place, customers in another, stock in a third. A bad copy or a deleted row could change a balance with no trace. This system closes that gap.
 
-- **فاتورة الآجل حالة طبيعية.** ترحيل الفاتورة يسجّل البيع ويخصم المخزون، ومش معناه إن العميل دفع. التحصيل حركة مستقلة بعد كده.
-- **المخزون دفتر حركة.** الكمية بتتغير بحركة وارد أو صادر مربوطة بمستند ومستخدم ووقت. مفيش تعديل صامت على الرصيد.
-- **المنتج غير العبوة.** الزيت منتج، والعبوة (لتر، جالون، برميل) هي اللي بتتباع وبتتخزن وبيتسعّر عليها.
-- **السعر مرن.** فيه سعر أساسي، وسعر لنوع عميل، وسعر لعميل بعينه. تغيير السعر الاستثنائي صلاحية محدودة.
-- **الشغل من غير نت.** البيانات على الجهاز في SQLite. لو النت قطع، البيع والمخزون مبيقفوش.
-- **عربي من الأول.** الواجهة RTL، والرسائل بالعربي، عشان مدير الفرع يشتغل بسرعة مش يترجم الشاشة.
-- **كل حركة حساسة وراها أثر.** التدقيق في الخلفية، من غير خطوات موافقة زيادة على المستخدم.
+- **A credit invoice is normal.** Posting the invoice records the sale and reduces stock. It does not mean the customer has paid. Collection is a separate later action.
+- **Inventory is a ledger.** Quantity changes only through an in or out movement tied to a document, a user, and a time. There is no silent overwrite of the balance.
+- **A product is not its package.** The oil is the product. The package (litre, gallon, drum) is what is sold, stocked, and priced.
+- **Pricing is flexible.** There is a base price, a price for a customer type, and a price for one customer. An exceptional price change is a limited permission.
+- **It works offline.** Data stays on the machine in SQLite. If the internet drops, sales and stock do not stop.
+- **Arabic comes first.** The interface is right-to-left and messages are in Arabic, so the branch manager can work without translating the screen.
+- **Sensitive actions leave a trail.** Audit runs in the background, without extra approval steps in front of the user.
 
-المستخدم الحالي مدير فرع واحد. الصلاحيات متقسمة (مبيعات، مخزن، حسابات، مدير) عشان نفس النظام يستحمل أكتر من مستخدم بعد كده من غير ما يتكتب تاني.
+The current user is one branch manager. Permissions are already split (sales, warehouse, accountant, manager) so the same system can take more users later without being rewritten.
 
-## إيه اللي بيغطيه
+## What it covers
 
-| الشاشة | الشغل |
+| Screen | Work |
 |---|---|
-| الرئيسية | ملخص اليوم، آخر الفواتير والمدفوعات، والعملاء اللي عليهم رصيد |
-| المبيعات | فواتير مسودة ومرحلة، وطباعة |
-| العملاء | الملف، الرصيد الناتج عن الحركات، وكشف الحساب |
-| المنتجات | المنتج وعبواته |
-| التسعير | أسعار أساسية وخاصة بالعميل |
-| المخزون | الأرصدة، الحركات، التسويات، والتحويل بين المخازن |
-| المشتريات | فواتير الموردين |
-| الخزينة | القبض والصرف |
-| التقارير | متابعة التشغيل |
-| المساعد | مسودات مساعدة داخل الشغل |
-| الإعدادات | المستخدمين، الصلاحيات، طرق الدفع، والنسخ الاحتياطي |
+| Home | Today's summary, recent invoices and payments, customers with an outstanding balance |
+| Sales | Draft and posted invoices, and printing |
+| Customers | The customer file, the balance derived from transactions, and the statement |
+| Products | The product and its packages |
+| Pricing | Base prices and customer-specific prices |
+| Inventory | Balances, movements, adjustments, and transfers between warehouses |
+| Purchasing | Supplier bills |
+| Treasury | Cash in and cash out |
+| Reports | Operational follow-up |
+| Assistant | Draft help inside the daily work |
+| Settings | Users, permissions, payment methods, and backup |
 
-طرق الدفع مش قائمة ثابتة في الكود. بتتظبط من الإعدادات، ومفيش تحصيل من غير طريقة مختارة.
+Payment methods are not a fixed list in code. They are configured in Settings, and a payment cannot be posted without a selected method.
 
-## الشكل التقني
+## How it is built
 
-التطبيق أيقونة ويندوز، مش موقع بيتفتح من المتصفح.
+The application is a Windows icon, not a site opened in a browser.
 
-1. برنامج سطح المكتب (WPF) بيفتح نافذة WebView2.
-2. نفس البرنامج بيشغّل واجهة برمجة محلية على `127.0.0.1` فقط.
-3. واجهة React العربية بتتحمل جوه النافذة.
-4. قاعدة SQLite بتفضل على الجهاز.
+1. The desktop program (WPF) opens a WebView2 window.
+2. The same program starts a local API bound only to `127.0.0.1`.
+3. The Arabic React interface loads inside that window.
+4. The SQLite database stays on the machine.
 
-الطبقات: `Domain` ثم `Application` ثم `Infrastructure` ثم `Api`، وبرنامج `Desktop` هو اللي بيقدمها للمستخدم. كده منطق البيع والمخزون مش مربوط بشكل الشاشة، ولو احتجنا نسخة متعددة المستخدمين بعدين الواجهة البرمجية موجودة.
+Layers are `Domain`, then `Application`, then `Infrastructure`, then `Api`. The `Desktop` program is what the user opens. Sales and stock rules are not tied to the shape of the screen, and the API is already there if a multi-user version is needed later.
 
-## التشغيل
+## Run it
 
-المطلوب: [.NET 8 SDK](https://dotnet.microsoft.com/download) و [Node.js](https://nodejs.org/) و WebView2 (موجود على ويندوز 10 و 11).
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download), [Node.js](https://nodejs.org/), and WebView2 (included on Windows 10 and 11).
 
 ```powershell
 cd src/PetroTrans.Web
@@ -61,12 +61,12 @@ cd ../..
 dotnet run --project src/PetroTrans.Desktop
 ```
 
-الاختبارات:
+Tests:
 
 ```powershell
 dotnet test PetroTrans.sln
 ```
 
-## إيه اللي مش مرفوع هنا
+## What is not in this repository
 
-ملفات Excel القديمة وفواتير العملاء الحقيقية فاضلة على الجهاز ومش جزء من المستودع العام. المستودع فيه النظام والتوثيق، مش بيانات التشغيل.
+The old Excel files and real customer invoices stay on the machine. They are not part of this public repository. The repository contains the system and its documentation, not live operating data.
