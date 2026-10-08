@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <RootNamespace>PetroTrans.Desktop</RootNamespace>
+    <AssemblyName>PetroTrans</AssemblyName>
+    <ApplicationTitle>Petro Trans</ApplicationTitle>
+    <Version>1.0.1</Version>
+    <ApplicationIcon>Assets\logo-petrotrans.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <ProjectReference Include="..\PetroTrans.Api\PetroTrans.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\logo-petrotrans.png" />
+    <Content Include="Assets\logo-petrotrans.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>logo-petrotrans.ico</TargetPath>
+    </Content>
+    <Content Include="..\PetroTrans.Api\wwwroot\**\*">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <Link>wwwroot\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
+</Project>
