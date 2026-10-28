@@ -116,11 +116,33 @@ a {
   z-index: 5;
 }
 
+/* Two fixed lines on every screen: brand, history and account on the first,
+   the main menu on its own line below, so the bar never grows to three or four lines. */
 .topbar-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'brand history actions'
+    'nav nav nav';
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.topbar-main > .brand {
+  grid-area: brand;
+}
+
+.topbar-main > .history-nav {
+  grid-area: history;
+  justify-self: start;
+}
+
+.topbar-main > .topbar-actions {
+  grid-area: actions;
+}
+
+.topbar-main > .app-nav {
+  grid-area: nav;
 }
 
 .brand {
@@ -160,11 +182,12 @@ a {
 
 .app-nav {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--nav-gap);
-  flex: 1;
   min-width: 0;
-  justify-content: center;
+  justify-content: safe center;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .app-nav-btn {
@@ -311,8 +334,16 @@ a {
   padding: 20px 24px 32px;
 }
 
+/* Every screen sits in one centred column, so wide windows have equal space on both sides
+   instead of everything hugging the right edge in Arabic. Blocks inside fill that column. */
+.main > section {
+  width: 100%;
+  max-width: clamp(1320px, 85vw, 1680px);
+  margin-inline: auto;
+  min-width: 0;
+}
+
 .page {
-  max-width: 1200px;
   min-width: 0;
 }
 
@@ -457,7 +488,7 @@ a {
 .profile-kpi-grid,
 .home-sections {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin: 12px 0 18px;
 }
@@ -553,7 +584,6 @@ a {
   border: 1px solid var(--border);
   background: var(--surface);
   margin-bottom: 12px;
-  max-width: 920px;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
@@ -683,7 +713,6 @@ a {
   border: 1px solid var(--border);
   padding: 16px 18px;
   margin-bottom: 16px;
-  max-width: 1100px;
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
@@ -723,9 +752,8 @@ a {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px 12px;
-  max-width: 920px;
 }
 
 .data-table {
@@ -796,7 +824,6 @@ a {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
   gap: 12px;
   margin-top: 12px;
-  max-width: 1100px;
 }
 
 .home-tile,
@@ -872,13 +899,12 @@ a {
 
 .totals {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 180px));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin: 12px 0;
   padding: 12px 14px;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  max-width: 720px;
   border-radius: var(--radius-sm);
 }
 
@@ -1203,7 +1229,6 @@ a {
   background: var(--surface);
   padding: 10px 12px;
   margin: 8px 0 16px;
-  max-width: 720px;
   border-radius: var(--radius-sm);
 }
 
@@ -1224,7 +1249,6 @@ a {
 
 .settings-block {
   margin-bottom: 20px;
-  max-width: 820px;
 }
 
 .empty-state {
@@ -1232,7 +1256,6 @@ a {
   border: 1px dashed var(--border-strong);
   padding: 18px;
   margin: 12px 0;
-  max-width: 560px;
   border-radius: var(--radius);
 }
 
@@ -1388,17 +1411,28 @@ a {
   }
 }
 
-@media (max-width: 1100px) {
-  .app-nav {
-    justify-content: flex-start;
+/* Narrower windows: keep every menu word visible (icons alone are hard to read),
+   just tighten spacing; the menu line scrolls sideways only if it still does not fit. */
+@media (max-width: 1400px) {
+  .app-nav-btn {
+    padding: 6px 8px;
+    font-size: clamp(15px, 1.4vw, 18px);
   }
 
-  .app-nav-btn span {
+  .app-nav-btn .ui-icon {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .history-nav span,
+  .brand-text,
+  .brand-version {
     display: none;
   }
 
-  .app-nav-btn {
-    padding: 8px;
+  .topbar-actions .user-chip {
+    display: none;
   }
 }
 
@@ -1414,15 +1448,6 @@ a {
 
   .main {
     padding: 12px 14px 20px;
-  }
-
-  .topbar-main {
-    align-items: flex-start;
-  }
-
-  .topbar-actions {
-    width: 100%;
-    justify-content: flex-end;
   }
 
   .kpi-card,
@@ -1453,4 +1478,18 @@ a {
 
 .pricing-inline-editor .panel-card {
   max-width: none;
+}
+
+/* Labelled fields inside a toolbar: the date width rule above must not turn into height
+   inside the label's vertical layout, and the buttons line up with the input boxes. */
+.toolbar:has(> .field) {
+  align-items: flex-end;
+}
+
+.toolbar > .field {
+  margin-bottom: 0;
+}
+
+.toolbar .field input[type='date'] {
+  flex: none;
 }

@@ -25,16 +25,13 @@ import {
 
 type PrintSection = 'in' | 'out' | 'bank'
 
-function monthStartIso() {
-  return `${todayIso().slice(0, 8)}01`
-}
-
 export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { t } = useLocale()
   const [book, setBook] = useState<TreasuryBook | null>(null)
   const [bankBook, setBankBook] = useState<TreasuryBook | null>(null)
-  const [from, setFrom] = useState(monthStartIso)
-  const [to, setTo] = useState(todayIso)
+  // Empty dates show everything; the user narrows the period only when they want to.
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [direction, setDirection] = useState<'in' | 'out'>('in')
   const [category, setCategory] = useState('sales')
@@ -60,10 +57,10 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
   const incoming = book?.entries.filter((row) => row.direction === 'in') ?? []
   const outgoing = book?.entries.filter((row) => row.direction === 'out') ?? []
 
-  async function refresh() {
+  async function refresh(range: { from: string; to: string } = { from, to }) {
     const [cash, bank] = await Promise.all([
-      fetchTreasury(from || undefined, to || undefined, filterCategory || undefined),
-      fetchTreasury(from || undefined, to || undefined, undefined, 'bank'),
+      fetchTreasury(range.from || undefined, range.to || undefined, filterCategory || undefined),
+      fetchTreasury(range.from || undefined, range.to || undefined, undefined, 'bank'),
     ])
     setBook(cash)
     setBankBook(bank)
@@ -298,6 +295,19 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
           </select>
         </label>
         <button className="btn-secondary" type="submit">{t.treasury.show}</button>
+        {from || to ? (
+          <button
+            className="btn-ghost"
+            type="button"
+            onClick={() => {
+              setFrom('')
+              setTo('')
+              void refresh({ from: '', to: '' }).catch((err: unknown) => setError(err))
+            }}
+          >
+            {t.treasury.allPeriods}
+          </button>
+        ) : null}
       </form>
 
       <form className="editor panel-card" onSubmit={(event) => void onSave(event)}>
