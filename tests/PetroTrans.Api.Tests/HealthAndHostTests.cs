@@ -218,7 +218,10 @@ internal sealed class TestHost : IAsyncDisposable
 
     public static async Task<TestHost> StartAsync()
     {
-        var databasePath = Path.Combine(Path.GetTempPath(), $"petrotrans-api-{Guid.NewGuid():N}.db");
+        // Each host gets its own folder so its automatic backups and backup status stay separate.
+        var folder = Path.Combine(Path.GetTempPath(), $"petrotrans-api-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        var databasePath = Path.Combine(folder, "petrotrans.db");
         var port = GetFreeLoopbackPort();
         var app = PetroTransApiHost.Create([], port, databasePath);
         await PetroTransApiHost.InitializeDatabaseAsync(app);
@@ -265,9 +268,10 @@ internal sealed class TestHost : IAsyncDisposable
         AnonymousClient.Dispose();
         await App.DisposeAsync();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (File.Exists(DatabasePath))
+        var folder = Path.GetDirectoryName(DatabasePath);
+        if (folder is not null && Directory.Exists(folder))
         {
-            File.Delete(DatabasePath);
+            Directory.Delete(folder, recursive: true);
         }
     }
 

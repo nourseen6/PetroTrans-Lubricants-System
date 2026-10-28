@@ -3,6 +3,7 @@ using PetroTrans.Application.Catalog;
 using PetroTrans.Application.Operations;
 using PetroTrans.Domain;
 using PetroTrans.Domain.Finance;
+using PetroTrans.Domain.Inventory;
 using PetroTrans.Infrastructure.Persistence;
 
 namespace PetroTrans.Infrastructure.Operations;
@@ -16,9 +17,11 @@ public sealed class TreasuryService : ITreasuryService
         _db = db;
     }
 
-    public async Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default)
+    public async Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default, string? account = null)
     {
+        var book = TreasuryAccounts.Normalize(account) ?? TreasuryAccounts.Cash;
         var rows = await _db.TreasuryEntries.AsNoTracking()
+            .Where(x => x.Account == book)
             .OrderBy(x => x.OccurredOn)
             .ThenBy(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -54,7 +57,7 @@ public sealed class TreasuryService : ITreasuryService
             var totalIn = entries.Where(x => x.Direction == TreasuryDirections.In).Sum(x => x.Amount);
             var totalOut = entries.Where(x => x.Direction == TreasuryDirections.Out).Sum(x => x.Amount);
             var categoryTotal = entries.Sum(x => x.Amount);
-            return new TreasuryBookDto(from, to, 0m, totalIn, totalOut, categoryTotal, entries, filter, categoryTotal);
+            return new TreasuryBookDto(from, to, 0m, totalIn, totalOut, categoryTotal, entries, filter, categoryTotal, book);
         }
 
         var opening = 0m;
@@ -62,7 +65,7 @@ public sealed class TreasuryService : ITreasuryService
         {
             var lastBefore = mapped.LastOrDefault(x => from is null || x.OccurredOn.Date < from.Value.Date);
             opening = lastBefore?.RunningBalance ?? 0m;
-            return new TreasuryBookDto(from, to, opening, 0m, 0m, opening, entries);
+            return new TreasuryBookDto(from, to, opening, 0m, 0m, opening, entries, Account: book);
         }
 
         var first = entries[0];
@@ -74,7 +77,8 @@ public sealed class TreasuryService : ITreasuryService
             entries.Where(x => x.Direction == TreasuryDirections.In).Sum(x => x.Amount),
             entries.Where(x => x.Direction == TreasuryDirections.Out).Sum(x => x.Amount),
             entries[^1].RunningBalance,
-            entries);
+            entries,
+            Account: book);
     }
 
     public async Task<OperationResult<TreasuryEntryDto>> CreateAsync(SaveTreasuryEntryRequest request, Guid actorUserId, CancellationToken cancellationToken = default)
@@ -101,8 +105,14 @@ public sealed class TreasuryService : ITreasuryService
             return OperationResult<TreasuryEntryDto>.Fail("البيان مطلوب.");
         }
 
+        var account = TreasuryAccounts.Normalize(request.Account);
+        if (account is null)
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("حدد الخزينة أو البنك.");
+        }
+
         var category = TreasuryCategories.Canonical(request.Category);
-        if (!TreasuryCategories.IsAllowed(direction, category))
+        if (!TreasuryCategories.IsAllowed(direction, category, account))
         {
             return OperationResult<TreasuryEntryDto>.Fail("تصنيف الحركة غير مطابق لاتجاه الخزينة.");
         }
@@ -114,17 +124,17 @@ public sealed class TreasuryService : ITreasuryService
                 cancellationToken);
             if (existing is not null)
             {
-                var bookExisting = await GetBookAsync(cancellationToken: cancellationToken);
+                var bookExisting = await GetBookAsync(cancellationToken: cancellationToken, account: existing.Account);
                 return OperationResult<TreasuryEntryDto>.Ok(bookExisting.Entries.First(x => x.Id == existing.Id));
             }
         }
 
         if (!string.IsNullOrWhiteSpace(request.Notes))
         {
-            var duplicateNote = await _db.TreasuryEntries.AnyAsync(x => x.Notes == request.Notes.Trim(), cancellationToken);
+            var duplicateNote = await _db.TreasuryEntries.AnyAsync(x => x.Notes == request.Notes.Trim() && x.Account == account, cancellationToken);
             if (duplicateNote)
             {
-                var bookDup = await GetBookAsync(cancellationToken: cancellationToken);
+                var bookDup = await GetBookAsync(cancellationToken: cancellationToken, account: account);
                 var mappedDup = bookDup.Entries.FirstOrDefault(x => x.Notes == request.Notes.Trim());
                 if (mappedDup is not null)
                 {
@@ -138,6 +148,7 @@ public sealed class TreasuryService : ITreasuryService
         {
             Id = UuidV7.New(),
             OccurredOn = request.OccurredOn.Date,
+            Account = account,
             Direction = direction,
             Category = category,
             Description = description,
@@ -152,6 +163,7 @@ public sealed class TreasuryService : ITreasuryService
         _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.create", "treasury_entry", entry.Id, null, new
         {
             entry.OccurredOn,
+            entry.Account,
             entry.Direction,
             entry.Category,
             entry.Description,
@@ -159,9 +171,71 @@ public sealed class TreasuryService : ITreasuryService
         }));
         await _db.SaveChangesAsync(cancellationToken);
 
-        var book = await GetBookAsync(cancellationToken: cancellationToken);
+        var book = await GetBookAsync(cancellationToken: cancellationToken, account: account);
         var mapped = book.Entries.First(x => x.Id == entry.Id);
         return OperationResult<TreasuryEntryDto>.Ok(mapped);
+    }
+
+    public async Task<OperationResult<bool>> CreateTransferAsync(SaveBankTransferRequest request, Guid actorUserId, CancellationToken cancellationToken = default)
+    {
+        var toBank = (request.Direction ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "to_bank" => true,
+            "from_bank" => false,
+            _ => (bool?)null
+        };
+        if (toBank is null)
+        {
+            return OperationResult<bool>.Fail("حدد إيداع في البنك أو سحب من البنك.");
+        }
+
+        if (request.OccurredOn == default)
+        {
+            return OperationResult<bool>.Fail("تاريخ الحركة مطلوب.");
+        }
+
+        if (request.Amount <= 0)
+        {
+            return OperationResult<bool>.Fail("المبلغ يجب أن يكون أكبر من صفر.");
+        }
+
+        var amount = decimal.Round(request.Amount, 4, MidpointRounding.AwayFromZero);
+        var description = string.IsNullOrWhiteSpace(request.Description)
+            ? (toBank.Value ? "إيداع في بنك مصر" : "سحب من بنك مصر")
+            : request.Description.Trim();
+        var notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        var transferId = UuidV7.New();
+        var category = toBank.Value ? TreasuryCategories.BankDeposit : TreasuryCategories.BankWithdrawal;
+
+        // Both sides share one transfer id, so they are saved, shown and deleted together.
+        TreasuryEntry Side(string account, string direction) => new()
+        {
+            Id = UuidV7.New(),
+            OccurredOn = request.OccurredOn.Date,
+            Account = account,
+            Direction = direction,
+            Category = category,
+            Description = description,
+            Amount = amount,
+            Notes = notes,
+            SourceDocumentType = SourceDocumentTypes.BankTransfer,
+            SourceDocumentId = transferId,
+            CreatedByUserId = actorUserId,
+            UpdatedByUserId = actorUserId
+        };
+
+        var cash = Side(TreasuryAccounts.Cash, toBank.Value ? TreasuryDirections.Out : TreasuryDirections.In);
+        var bank = Side(TreasuryAccounts.Bank, toBank.Value ? TreasuryDirections.In : TreasuryDirections.Out);
+        _db.TreasuryEntries.AddRange(cash, bank);
+        _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.transfer", "treasury_entry", transferId, null, new
+        {
+            cash.OccurredOn,
+            Direction = toBank.Value ? "to_bank" : "from_bank",
+            description,
+            amount
+        }));
+        await _db.SaveChangesAsync(cancellationToken);
+        return OperationResult<bool>.Ok(true);
     }
 
     public async Task<OperationResult<bool>> DeleteAsync(Guid id, Guid actorUserId, CancellationToken cancellationToken = default)
@@ -170,6 +244,22 @@ public sealed class TreasuryService : ITreasuryService
         if (entry is null)
         {
             return OperationResult<bool>.Fail("حركة الخزينة غير موجودة.", 404);
+        }
+
+        if (entry.SourceDocumentType == SourceDocumentTypes.BankTransfer && entry.SourceDocumentId is { } transferId)
+        {
+            var sides = await _db.TreasuryEntries
+                .Where(x => x.SourceDocumentType == SourceDocumentTypes.BankTransfer && x.SourceDocumentId == transferId)
+                .ToListAsync(cancellationToken);
+            _db.TreasuryEntries.RemoveRange(sides);
+            _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.transfer.delete", "treasury_entry", transferId, new
+            {
+                entry.OccurredOn,
+                entry.Description,
+                entry.Amount
+            }, new { deleted = true }));
+            await _db.SaveChangesAsync(cancellationToken);
+            return OperationResult<bool>.Ok(true);
         }
 
         if (!string.IsNullOrWhiteSpace(entry.SourceDocumentType))
@@ -203,5 +293,7 @@ public sealed class TreasuryService : ITreasuryService
             row.Amount,
             row.Notes,
             running,
-            !string.IsNullOrWhiteSpace(row.SourceDocumentType));
+            !string.IsNullOrWhiteSpace(row.SourceDocumentType) && row.SourceDocumentType != SourceDocumentTypes.BankTransfer,
+            row.Account,
+            row.SourceDocumentType == SourceDocumentTypes.BankTransfer);
 }

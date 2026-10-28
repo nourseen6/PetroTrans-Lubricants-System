@@ -12,6 +12,7 @@ using PetroTrans.Application;
 using PetroTrans.Application.Identity;
 using PetroTrans.Infrastructure;
 using PetroTrans.Infrastructure.Assets;
+using PetroTrans.Infrastructure.Backup;
 using PetroTrans.Infrastructure.Persistence;
 
 namespace PetroTrans.Api;
@@ -39,10 +40,15 @@ public static class PetroTransApiHost
             options.Listen(IPAddress.Loopback, listenPort);
         });
 
-        var databasePath = sqlitePath ?? SqlitePaths.GetDefaultDatabasePath();
+        // PetroTrans:DatabasePath lets a developer run against a throwaway file instead of the real data.
+        var databasePath = sqlitePath
+            ?? builder.Configuration.GetValue<string?>("PetroTrans:DatabasePath")
+            ?? SqlitePaths.GetDefaultDatabasePath();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath))!);
         var connectionString = SqlitePaths.GetConnectionString(databasePath);
         builder.Services.AddApplication();
         builder.Services.AddInfrastructure(connectionString, databasePath);
+        builder.Services.AddHostedService<BackupScheduler>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         builder.Services.ConfigureHttpJsonOptions(options =>
@@ -122,6 +128,7 @@ public static class PetroTransApiHost
         app.MapCatalogEndpoints();
         app.MapSalesEndpoints();
         app.MapOperationsEndpoints();
+        app.MapBackupEndpoints();
         app.MapAssistantEndpoints();
         app.Map("/api/{**rest}", () => Results.Json(new { error = "غير موجود." }, statusCode: StatusCodes.Status404NotFound));
         app.MapFallbackToFile("index.html");
@@ -213,8 +220,23 @@ public static class PetroTransApiHost
 
     public static async Task InitializeDatabaseAsync(WebApplication app, CancellationToken cancellationToken = default)
     {
+        // A copy before anything else runs: it also protects the data before a new version upgrades the database.
+        app.Services.GetRequiredService<BackupManager>().CreateBackup("startup");
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await DatabaseInitializer.InitializeAsync(db, cancellationToken);
+    }
+
+    /// <summary>Called when the window closes, before the server stops, so the last day of work is saved.</summary>
+    public static void BackupOnClose(WebApplication app)
+    {
+        try
+        {
+            app.Services.GetRequiredService<BackupManager>().CreateBackup("close");
+        }
+        catch (Exception ex)
+        {
+            WriteErrorLog(ex);
+        }
     }
 }

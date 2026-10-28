@@ -15,6 +15,108 @@ public class CoreWorkflowTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public async Task BankTransferPayment_LandsInBankMisr_NotInCashBox()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        var posted = (await api.PostInvoiceAsync((await api.CreateInvoiceAsync(api.CustomerId, api.WarehouseId, api.VariantId, 2, 10m)).Id)).Invoice!;
+        var bankMethod = await api.Client.PostAsJsonAsync("/api/payment-methods", new { name = "تحويل بنك مصر", isActive = true });
+        var bankMethodId = (await bankMethod.Content.ReadFromJsonAsync<IdResponse>(Json))!.Id;
+
+        var paid = await api.Client.PostAsJsonAsync("/api/payments", new
+        {
+            invoiceId = posted.Id,
+            paymentMethodId = bankMethodId,
+            amount = 20m,
+            paidOn = "2026-08-17",
+            reference = (string?)null,
+            notes = (string?)null
+        });
+
+        Assert.Equal(HttpStatusCode.Created, paid.StatusCode);
+        Assert.Equal(0m, await api.OutstandingAsync());
+        Assert.Empty((await api.TreasuryAsync()).Entries);
+        var bank = await api.BankAsync();
+        Assert.Equal(20m, bank.Balance);
+        Assert.Equal("sales", Assert.Single(bank.Entries).Category);
+    }
+
+    [Fact]
+    public async Task BankDepositAndWithdrawal_MoveMoneyBetweenBooks_AndDeleteTogether()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        await api.LoginAsync("father", "father1");
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury", new
+        {
+            occurredOn = "2026-08-10",
+            direction = "in",
+            category = "sales",
+            description = "مبيعات",
+            amount = 1000m,
+            notes = (string?)null
+        })).StatusCode);
+
+        var deposit = await api.Client.PostAsJsonAsync("/api/treasury/transfer", new
+        {
+            occurredOn = "2026-08-11",
+            direction = "to_bank",
+            amount = 700m,
+            description = (string?)null,
+            notes = (string?)null
+        });
+        Assert.Equal(HttpStatusCode.Created, deposit.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury/transfer", new
+        {
+            occurredOn = "2026-08-12",
+            direction = "from_bank",
+            amount = 200m,
+            description = "سحب للمصاريف",
+            notes = (string?)null
+        })).StatusCode);
+
+        var cash = await api.TreasuryAsync();
+        var bank = await api.BankAsync();
+        Assert.Equal(500m, cash.Balance);
+        Assert.Equal(500m, bank.Balance);
+        Assert.Equal(1000m + 700m - 700m + 200m - 200m, cash.Balance + bank.Balance);
+
+        // A direct bank fee only touches the bank.
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury", new
+        {
+            occurredOn = "2026-08-13",
+            direction = "out",
+            category = "bank_fees",
+            description = "مصاريف حساب",
+            amount = 15m,
+            notes = (string?)null,
+            account = "bank"
+        })).StatusCode);
+        Assert.Equal(485m, (await api.BankAsync()).Balance);
+        Assert.Equal(500m, (await api.TreasuryAsync()).Balance);
+
+        // Rent is a cash-only item and is refused in the bank book.
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.Client.PostAsJsonAsync("/api/treasury", new
+        {
+            occurredOn = "2026-08-13",
+            direction = "out",
+            category = "rent",
+            description = "إيجار",
+            amount = 15m,
+            notes = (string?)null,
+            account = "bank"
+        })).StatusCode);
+
+        // Deleting the deposit from the bank side removes the cash side too.
+        var bankBook = await api.Client.GetFromJsonAsync<BankBookResponse>("/api/treasury?account=bank", Json);
+        var depositRow = bankBook!.Entries.First(x => x.Amount == 700m);
+        Assert.True(depositRow.IsTransfer);
+        Assert.Equal(HttpStatusCode.OK, (await api.Client.DeleteAsync($"/api/treasury/{depositRow.Id}")).StatusCode);
+        Assert.Equal(1200m, (await api.TreasuryAsync()).Balance);
+        Assert.Equal(-215m, (await api.BankAsync()).Balance);
+    }
+
+    [Fact]
     public async Task Scenario1_CreditSale_DraftPostPartialThenPaid_DoesNotChangeStockOnPayment()
     {
         await using var host = await TestHost.StartAsync();
@@ -851,7 +953,7 @@ public class CoreWorkflowTests
             var variantId = (await product.Content.ReadFromJsonAsync<ProductResponse>(Json))!.Variants[0].Id;
             var warehouse = await host.Client.PostAsJsonAsync("/api/warehouses", new { name = "المخزن التشغيلي", isActive = true });
             var warehouseId = (await warehouse.Content.ReadFromJsonAsync<IdResponse>(Json))!.Id;
-            var method = await host.Client.PostAsJsonAsync("/api/payment-methods", new { name = "تحويل", isActive = true });
+            var method = await host.Client.PostAsJsonAsync("/api/payment-methods", new { name = "نقدي", isActive = true });
             var methodId = (await method.Content.ReadFromJsonAsync<IdResponse>(Json))!.Id;
             if (configureSeries)
             {
@@ -963,6 +1065,9 @@ public class CoreWorkflowTests
         public async Task<TreasuryBookResponse> TreasuryAsync()
             => (await Client.GetFromJsonAsync<TreasuryBookResponse>("/api/treasury", Json))!;
 
+        public async Task<TreasuryBookResponse> BankAsync()
+            => (await Client.GetFromJsonAsync<TreasuryBookResponse>("/api/treasury?account=bank", Json))!;
+
         public async Task<Guid> CreateSupplierAsync(string code = "S-1")
         {
             var created = await Client.PostAsJsonAsync("/api/suppliers", new
@@ -1050,4 +1155,6 @@ public class CoreWorkflowTests
     private sealed record TreasuryBookResponse(decimal TotalIn, decimal TotalOut, decimal Balance, TreasuryRow[] Entries);
     private sealed record TreasuryRow(string Direction, decimal Amount, string? Category);
     private sealed record TreasuryEntryResponse(Guid Id, decimal Amount);
+    private sealed record BankBookResponse(BankRow[] Entries);
+    private sealed record BankRow(Guid Id, decimal Amount, bool IsTransfer);
 }

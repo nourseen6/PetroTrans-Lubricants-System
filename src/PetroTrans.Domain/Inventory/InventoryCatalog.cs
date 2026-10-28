@@ -29,4 +29,5 @@ public static class SourceDocumentTypes
     public const string Payment = "payment";
     public const string PaymentLink = "payment_link";
     public const string SupplierPayment = "supplier_payment";
+    public const string BankTransfer = "bank_transfer";
 }

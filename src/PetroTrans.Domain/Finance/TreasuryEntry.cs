@@ -8,6 +8,18 @@ public static class TreasuryDirections
     public const string Out = "out";
 }
 
+public static class TreasuryAccounts
+{
+    public const string Cash = "cash";
+    public const string Bank = "bank";
+
+    public static string? Normalize(string? account)
+    {
+        var value = string.IsNullOrWhiteSpace(account) ? Cash : account.Trim().ToLowerInvariant();
+        return value is Cash or Bank ? value : null;
+    }
+}
+
 public static class TreasuryCategories
 {
     public const string Sales = "sales";
@@ -20,10 +32,12 @@ public static class TreasuryCategories
     public const string Deposit = "deposit";
     public const string Withdrawal = "withdrawal";
     public const string BankDeposit = "bank_deposit";
+    public const string BankWithdrawal = "bank_withdrawal";
+    public const string BankFees = "bank_fees";
     public const string SupplierPayment = "supplier_payment";
     public const string Other = "other";
 
-    public static readonly string[] Incoming = [Sales, Deposit, BankDeposit, Other];
+    public static readonly string[] Incoming = [Sales, Deposit, BankDeposit, BankWithdrawal, Other];
     public static readonly string[] Outgoing =
     [
         Salaries,
@@ -38,11 +52,21 @@ public static class TreasuryCategories
         Other
     ];
 
-    public static bool IsAllowed(string direction, string? category)
+    public static readonly string[] BankIncoming = [Sales, BankDeposit, Other];
+    public static readonly string[] BankOutgoing = [BankWithdrawal, SupplierPayment, Salaries, BankFees, Other];
+
+    public static bool IsAllowed(string direction, string? category, string account = TreasuryAccounts.Cash)
     {
         if (string.IsNullOrWhiteSpace(category))
         {
             return true;
+        }
+
+        if (account == TreasuryAccounts.Bank)
+        {
+            return direction == TreasuryDirections.In
+                ? BankIncoming.Contains(category)
+                : BankOutgoing.Contains(category);
         }
 
         return direction == TreasuryDirections.In
@@ -98,6 +122,7 @@ public sealed class TreasuryEntry : IAuditedEntity
 {
     public Guid Id { get; set; }
     public DateTime OccurredOn { get; set; }
+    public string Account { get; set; } = TreasuryAccounts.Cash;
     public string Direction { get; set; } = TreasuryDirections.In;
     public string? Category { get; set; }
     public string Description { get; set; } = string.Empty;

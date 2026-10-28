@@ -1,13 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
-  backupDb,
   fetchAudit,
   fetchCompany,
   fetchInvoiceSeries,
   fetchLogos,
   fetchPaymentMethods,
   fetchWarehouses,
-  restoreDb,
   saveCompany,
   saveInvoiceSeries,
   savePaymentMethod,
@@ -20,6 +18,7 @@ import { useLocale } from '../i18n/LocaleContext'
 import { EmptyState, ErrorBanner } from '../ui/Feedback'
 import { auditLabel, formatDate } from '../ui/format'
 import { APP_VERSION } from '../version'
+import { BackupSection } from './BackupSection'
 
 export function SettingsPage() {
   const { t } = useLocale()
@@ -36,8 +35,6 @@ export function SettingsPage() {
   const [companyName, setCompanyName] = useState('')
   const [logoPath, setLogoPath] = useState('')
   const [logos, setLogos] = useState<Array<{ relativePath: string; url: string }>>([])
-  const [backupPath, setBackupPath] = useState('')
-  const [restorePath, setRestorePath] = useState('')
   const [audit, setAudit] = useState<AuditRow[]>([])
   const [hasSeries, setHasSeries] = useState(false)
 
@@ -160,21 +157,8 @@ export function SettingsPage() {
       </section>
 
       <section className="settings-block">
-        <h2 className="editor-title">6. {t.settings.backup}</h2>
-        <form className="toolbar" onSubmit={(event) => void submitLookup(event, () => backupDb(backupPath), () => undefined, t.settings.backupOk)}>
-          <input value={backupPath} onChange={(event) => setBackupPath(event.target.value)} placeholder={t.settings.backupPath} required />
-          <button className="primary-btn toolbar-btn" type="submit">{t.settings.backupAction}</button>
-        </form>
-        <form className="toolbar" onSubmit={(event) => {
-          event.preventDefault()
-          if (!window.confirm(t.settings.restoreConfirm)) {
-            return
-          }
-          void submitLookup(event, () => restoreDb(restorePath, true), () => undefined)
-        }}>
-          <input value={restorePath} onChange={(event) => setRestorePath(event.target.value)} placeholder={t.settings.restore} required />
-          <button type="submit" className="btn-danger">{t.settings.restore}</button>
-        </form>
+        <h2 className="editor-title" id="backup">6. {t.settings.backup}</h2>
+        <BackupSection />
       </section>
 
       <section className="settings-block">

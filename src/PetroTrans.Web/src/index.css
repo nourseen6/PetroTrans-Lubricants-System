@@ -699,6 +699,19 @@ a {
   gap: 16px;
 }
 
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.panel-head .editor-title {
+  margin: 0;
+}
+
 .print-block {
   margin: 18px 0 24px;
   page-break-inside: avoid;
@@ -1426,4 +1439,18 @@ a {
   .page-title {
     font-size: 22px;
   }
+}
+
+.data-table tr.selected-row td {
+  background: var(--accent-soft);
+  font-weight: 700;
+}
+
+.data-table tr.inline-editor-row > td {
+  background: var(--bg);
+  padding: 12px;
+}
+
+.pricing-inline-editor .panel-card {
+  max-width: none;
 }

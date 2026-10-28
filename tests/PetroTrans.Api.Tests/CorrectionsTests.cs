@@ -100,6 +100,35 @@ public class CorrectionsTests
     }
 
     [Fact]
+    public async Task Restore_SavesCurrentDataFirst_SoAWrongRestoreCanBeUndone()
+    {
+        await using var host = await TestHost.StartAsync();
+        await host.Client.PostAsJsonAsync("/api/auth/setup", TestHost.SampleSetup());
+        await host.Client.PostAsync("/api/auth/logout", null);
+        await host.Client.PostAsJsonAsync("/api/auth/login", new { userName = "father", password = "father1" });
+
+        var before = await (await host.Client.PostAsync("/api/backup/now", null)).Content.ReadFromJsonAsync<BackupStatusResponse>(Json);
+        var emptyCopy = Assert.Single(before!.Backups).FullPath;
+        Assert.Equal(HttpStatusCode.Created, (await host.Client.PostAsJsonAsync("/api/treasury", new
+        {
+            occurredOn = "2026-08-12",
+            direction = "in",
+            category = "sales",
+            description = "شغل اليوم",
+            amount = 500m,
+            notes = (string?)null
+        })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await host.Client.PostAsJsonAsync("/api/restore", new { sourcePath = emptyCopy, confirm = true })).StatusCode);
+        Assert.Equal(0m, (await host.Client.GetFromJsonAsync<TreasuryBookResponse>("/api/treasury", Json))!.Balance);
+
+        var status = await host.Client.GetFromJsonAsync<BackupStatusResponse>("/api/backup/status", Json);
+        var safety = status!.Backups.First(x => x.Reason == "before-restore").FullPath;
+        Assert.Equal(HttpStatusCode.OK, (await host.Client.PostAsJsonAsync("/api/restore", new { sourcePath = safety, confirm = true })).StatusCode);
+        Assert.Equal(500m, (await host.Client.GetFromJsonAsync<TreasuryBookResponse>("/api/treasury", Json))!.Balance);
+    }
+
+    [Fact]
     public async Task Treasury_BankDeposit_AllowedIncomingAndFilterIncludesOldDeposit()
     {
         await using var host = await TestHost.StartAsync();
@@ -278,6 +307,8 @@ public class CorrectionsTests
     private sealed record PricingRow(Guid VariantId, decimal? BasePrice, decimal? PurchasePrice, int CustomerPriceCount);
     private sealed record TreasuryBookResponse(decimal TotalIn, decimal TotalOut, decimal Balance, TreasuryRow[] Entries, decimal CategoryTotal = 0);
     private sealed record TreasuryRow(decimal RunningBalance, string? Category = null);
+    private sealed record BackupStatusResponse(BackupFileResponse[] Backups);
+    private sealed record BackupFileResponse(string FullPath, string Reason);
     private sealed record ReportResponse(string[] Columns, ReportKpi[]? Kpis);
     private sealed record ReportKpi(string Label, string Value);
 }

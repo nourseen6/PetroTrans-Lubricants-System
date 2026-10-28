@@ -342,6 +342,7 @@ public sealed partial class AppDbContext
             entity.ToTable("treasury_entries");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.OccurredOn).HasColumnName("occurred_on").IsRequired();
+            entity.Property(x => x.Account).HasColumnName("account").HasMaxLength(8).IsRequired();
             entity.Property(x => x.Direction).HasColumnName("direction").HasMaxLength(8).IsRequired();
             entity.Property(x => x.Category).HasColumnName("category").HasMaxLength(32);
             entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(256).IsRequired();

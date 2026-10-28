@@ -76,6 +76,7 @@ public static class OperationsEndpoints
         app.MapGet("/api/suppliers/{id:guid}/statement", (Delegate)SupplierStatement).RequireAuthorization($"perm:{PermissionCodes.PurchasingView}");
         app.MapGet("/api/treasury", (Delegate)TreasuryBook).RequireAuthorization($"perm:{PermissionCodes.TreasuryView}");
         app.MapPost("/api/treasury", (Delegate)CreateTreasury).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
+        app.MapPost("/api/treasury/transfer", (Delegate)CreateTreasuryTransfer).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
         app.MapDelete("/api/treasury/{id:guid}", (Delegate)DeleteTreasury).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
     }
 
@@ -224,11 +225,14 @@ public static class OperationsEndpoints
     private static async Task<IResult> SupplierStatement(Guid id, DateTime? from, DateTime? to, IReportService reports, CancellationToken ct)
         => JsonOrNotFound(await reports.SupplierStatementAsync(id, from, to, ct), "المورد غير موجود.");
 
-    private static async Task<IResult> TreasuryBook(DateTime? from, DateTime? to, string? category, ITreasuryService treasury, CancellationToken ct)
-        => Results.Json(await treasury.GetBookAsync(from, to, category, ct));
+    private static async Task<IResult> TreasuryBook(DateTime? from, DateTime? to, string? category, string? account, ITreasuryService treasury, CancellationToken ct)
+        => Results.Json(await treasury.GetBookAsync(from, to, category, ct, account));
 
     private static async Task<IResult> CreateTreasury(SaveTreasuryEntryRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
         => From(await treasury.CreateAsync(request, CurrentUser.RequireId(http), ct), 201);
+
+    private static async Task<IResult> CreateTreasuryTransfer(SaveBankTransferRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
+        => From(await treasury.CreateTransferAsync(request, CurrentUser.RequireId(http), ct), 201);
 
     private static async Task<IResult> DeleteTreasury(Guid id, HttpContext http, ITreasuryService treasury, CancellationToken ct)
         => From(await treasury.DeleteAsync(id, CurrentUser.RequireId(http), ct));

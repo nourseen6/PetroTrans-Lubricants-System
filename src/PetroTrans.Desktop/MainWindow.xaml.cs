@@ -221,6 +221,7 @@ public partial class MainWindow : Window
         _api = null;
         if (api is not null)
         {
+            PetroTransApiHost.BackupOnClose(api);
             _ = StopApiAsync(api);
         }
     }

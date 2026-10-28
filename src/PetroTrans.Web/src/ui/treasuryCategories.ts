@@ -1,4 +1,8 @@
-export const incomingTreasuryCategories = ['sales', 'bank_deposit', 'other'] as const
+// "bank_deposit" (cash → bank) and "bank_withdrawal" (bank → cash) are saved as transfers,
+// so the same amount shows up in the cash book and in the bank book at once.
+export const transferCategories = ['bank_deposit', 'bank_withdrawal'] as const
+
+export const incomingTreasuryCategories = ['sales', 'bank_withdrawal', 'other'] as const
 export const outgoingTreasuryCategories = [
   'salaries',
   'rent',
@@ -12,9 +16,13 @@ export const outgoingTreasuryCategories = [
   'other',
 ] as const
 
+export const bankIncomingCategories = ['sales', 'bank_deposit', 'other'] as const
+export const bankOutgoingCategories = ['bank_withdrawal', 'supplier_payment', 'salaries', 'bank_fees', 'other'] as const
+
 export const allTreasuryCategories = [
   'sales',
   'bank_deposit',
+  'bank_withdrawal',
   'other',
   'salaries',
   'rent',
@@ -24,10 +32,15 @@ export const allTreasuryCategories = [
   'car_expense',
   'withdrawal',
   'supplier_payment',
+  'bank_fees',
 ] as const
 
-const incomingFilterCategories: readonly string[] = [...incomingTreasuryCategories, 'deposit']
-const outgoingFilterCategories: readonly string[] = [...outgoingTreasuryCategories]
+const incomingFilterCategories: readonly string[] = [...incomingTreasuryCategories, ...bankIncomingCategories, 'deposit']
+const outgoingFilterCategories: readonly string[] = [...outgoingTreasuryCategories, ...bankOutgoingCategories]
+
+export function isTransferCategory(category: string | null | undefined): boolean {
+  return (transferCategories as readonly string[]).includes(category ?? '')
+}
 
 export function isIncomingTreasuryFilter(category: string | null | undefined): boolean {
   return !category || incomingFilterCategories.includes(category)
@@ -50,6 +63,8 @@ export function treasuryCategoryLabel(
     carExpense: string
     withdrawal: string
     bankDeposit: string
+    bankWithdrawal: string
+    bankFees: string
     supplierPayment: string
     other: string
     noCategory: string
@@ -59,6 +74,8 @@ export function treasuryCategoryLabel(
     case 'sales': return labels.sales
     case 'deposit':
     case 'bank_deposit': return labels.bankDeposit
+    case 'bank_withdrawal': return labels.bankWithdrawal
+    case 'bank_fees': return labels.bankFees
     case 'salaries': return labels.salaries
     case 'rent': return labels.rent
     case 'office_expense': return labels.officeExpense

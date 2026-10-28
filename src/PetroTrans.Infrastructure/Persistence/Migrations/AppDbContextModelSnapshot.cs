@@ -735,6 +735,12 @@ namespace PetroTrans.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("account");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 4)
                         .HasColumnType("TEXT")
