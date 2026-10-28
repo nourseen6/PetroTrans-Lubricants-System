@@ -216,6 +216,11 @@ public sealed class BackupManager
         from.Open();
         to.Open();
         from.BackupDatabase(to);
+
+        // The live file uses WAL; a backup must be one self-contained file with no -wal/-shm beside it.
+        using var journal = to.CreateCommand();
+        journal.CommandText = "PRAGMA journal_mode=DELETE;";
+        journal.ExecuteNonQuery();
     }
 
     private void MirrorToSecondary(string backupPath, BackupState state)
@@ -279,6 +284,12 @@ public sealed class BackupManager
 
     private static BackupFile? ToBackupFile(string path)
     {
+        // Windows matches "*.db" against ".db-shm" and ".db-wal" too, so check the extension exactly.
+        if (!string.Equals(Path.GetExtension(path), ".db", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         var name = Path.GetFileNameWithoutExtension(path);
         if (!name.StartsWith(FilePrefix, StringComparison.OrdinalIgnoreCase) || name.Length < FilePrefix.Length + StampFormat.Length)
         {

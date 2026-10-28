@@ -44,6 +44,8 @@ public sealed class BackupManagerTests : IDisposable
 
         Assert.True(result.Ok, result.Error);
         Assert.True(BackupManager.IsHealthy(result.Path!));
+        Assert.False(File.Exists(result.Path + "-wal"));
+        Assert.False(File.Exists(result.Path + "-shm"));
         var mirrored = Path.Combine(second, BackupManager.SecondarySubfolder, Path.GetFileName(result.Path!));
         Assert.True(File.Exists(mirrored));
         Assert.True(BackupManager.IsHealthy(mirrored));
