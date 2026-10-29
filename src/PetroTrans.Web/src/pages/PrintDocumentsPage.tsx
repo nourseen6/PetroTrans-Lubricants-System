@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { fetchCompany, fetchPayment, fetchStatement, fetchSupplierStatement, fetchTreasury, fetchBill, fetchReceipt, fetchReport, type CompanySettings, type PaymentDetail, type Statement, type SupplierStatement, type TreasuryBook, type Report } from '../api/operations'
 import { displayKpiValue, displayReportCell, formatDate, formatMoney } from '../ui/format'
 import { requestPdf, requestPrint } from '../ui/print'
-import { treasuryCategoryLabel } from '../ui/treasuryCategories'
+import { treasuryCategoryLabel, useTreasuryCategories } from '../ui/treasuryCategories'
 
 function PrintChrome({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -408,6 +408,8 @@ export function PrintSupplierStatementPage({ supplierId }: { supplierId: string 
 }
 
 export function PrintTreasuryPage() {
+  const items = useTreasuryCategories()
+  const label = (code: string | null) => items.names.get(code ?? '') ?? printTreasuryCategoryLabel(code)
   const params = new URLSearchParams(window.location.search)
   const from = params.get('from') ?? undefined
   const to = params.get('to') ?? undefined
@@ -431,7 +433,7 @@ export function PrintTreasuryPage() {
   const incoming = book.entries.filter((row) => row.direction === 'in')
   const outgoing = book.entries.filter((row) => row.direction === 'out')
   const filtered = Boolean(book.filterCategory)
-  const categoryName = printTreasuryCategoryLabel(book.filterCategory ?? null)
+  const categoryName = label(book.filterCategory ?? null)
   const period = `الفترة: من ${from ? formatDate(from) : 'البداية'} إلى ${to ? formatDate(to) : 'اليوم'}`
   const showIn = section !== 'out' && section !== 'bank' && !(filtered && incoming.length === 0)
   const showOut = section !== 'in' && section !== 'bank' && !(filtered && outgoing.length === 0)
@@ -469,7 +471,7 @@ export function PrintTreasuryPage() {
             <tr key={row.id}>
               <td>{formatDate(row.occurredOn)}</td>
               <td>{row.description}</td>
-              <td>{printTreasuryCategoryLabel(row.category)}</td>
+              <td>{label(row.category)}</td>
               <td>{formatMoney(row.amount)}</td>
             </tr>
           ))}
@@ -525,7 +527,7 @@ export function PrintTreasuryPage() {
                   <tr key={row.id}>
                     <td>{formatDate(row.occurredOn)}</td>
                     <td>{row.description}</td>
-                    <td>{printTreasuryCategoryLabel(row.category)}</td>
+                    <td>{label(row.category)}</td>
                     <td>{row.direction === 'in' ? formatMoney(row.amount) : ''}</td>
                     <td>{row.direction === 'out' ? formatMoney(row.amount) : ''}</td>
                     <td>{formatMoney(row.runningBalance)}</td>

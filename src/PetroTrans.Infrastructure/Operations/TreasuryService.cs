@@ -102,7 +102,9 @@ public sealed class TreasuryService : ITreasuryService
         var description = (request.Description ?? string.Empty).Trim();
         if (description.Length == 0)
         {
-            return OperationResult<TreasuryEntryDto>.Fail("البيان مطلوب.");
+            return OperationResult<TreasuryEntryDto>.Fail(request.Category == TreasuryCategories.Other
+                ? "اكتب في البيان الحركة دي إيه بالظبط، لأن التصنيف غير ذلك."
+                : "البيان مطلوب.");
         }
 
         var account = TreasuryAccounts.Normalize(request.Account);
@@ -112,7 +114,7 @@ public sealed class TreasuryService : ITreasuryService
         }
 
         var category = TreasuryCategories.Canonical(request.Category);
-        if (!TreasuryCategories.IsAllowed(direction, category, account))
+        if (!await IsCategoryAllowedAsync(direction, category, account, cancellationToken))
         {
             return OperationResult<TreasuryEntryDto>.Fail("تصنيف الحركة غير مطابق لاتجاه الخزينة.");
         }
@@ -279,6 +281,111 @@ public sealed class TreasuryService : ITreasuryService
         await _db.SaveChangesAsync(cancellationToken);
         return OperationResult<bool>.Ok(true);
     }
+
+    public async Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default)
+        => await _db.TreasuryCategories.AsNoTracking()
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .Select(x => new TreasuryCategoryDto(x.Id, x.Code, x.Name, x.Direction, x.IsActive, x.IsSystem, x.SortOrder))
+            .ToListAsync(cancellationToken);
+
+    public async Task<OperationResult<TreasuryCategoryDto>> CreateCategoryAsync(SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default)
+    {
+        var name = (request.Name ?? string.Empty).Trim();
+        var direction = (request.Direction ?? string.Empty).Trim().ToLowerInvariant();
+        if (name.Length == 0)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("اكتب اسم البند.");
+        }
+
+        if (name.Length > 64)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("اسم البند طويل. خليه أقل من 64 حرف.");
+        }
+
+        if (direction is not TreasuryDirections.In and not TreasuryDirections.Out)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("حدد البند ده وارد ولا منصرف.");
+        }
+
+        if (await _db.TreasuryCategories.AnyAsync(x => x.Name == name && x.Direction == direction, cancellationToken))
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("فيه بند بنفس الاسم موجود.");
+        }
+
+        var order = await _db.TreasuryCategories.AnyAsync(cancellationToken)
+            ? await _db.TreasuryCategories.MaxAsync(x => x.SortOrder, cancellationToken) + 1
+            : 0;
+        var row = new TreasuryCategory
+        {
+            Id = UuidV7.New(),
+            // A generated code, so renaming the item later never touches saved movements.
+            Code = $"c_{Guid.NewGuid():N}"[..14],
+            Name = name,
+            Direction = direction,
+            IsActive = true,
+            SortOrder = order,
+            CreatedByUserId = actorUserId,
+            UpdatedByUserId = actorUserId
+        };
+        _db.TreasuryCategories.Add(row);
+        _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.category.create", "treasury_category", row.Id, null, new { row.Code, row.Name, row.Direction }));
+        await _db.SaveChangesAsync(cancellationToken);
+        return OperationResult<TreasuryCategoryDto>.Ok(MapCategory(row));
+    }
+
+    public async Task<OperationResult<TreasuryCategoryDto>> UpdateCategoryAsync(Guid id, SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default)
+    {
+        var row = await _db.TreasuryCategories.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (row is null)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("البند غير موجود.", 404);
+        }
+
+        var name = (request.Name ?? string.Empty).Trim();
+        if (name.Length == 0)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("اكتب اسم البند.");
+        }
+
+        if (name.Length > 64)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("اسم البند طويل. خليه أقل من 64 حرف.");
+        }
+
+        if (row.IsSystem && !request.IsActive)
+        {
+            return OperationResult<TreasuryCategoryDto>.Fail("البند ده البرنامج بيستخدمه لوحده، فينفع تغيّر اسمه بس مينفعش تخفيه.");
+        }
+
+        var before = new { row.Name, row.IsActive };
+        row.Name = name;
+        row.IsActive = request.IsActive;
+        row.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.category.update", "treasury_category", row.Id, before, new { row.Name, row.IsActive }));
+        await _db.SaveChangesAsync(cancellationToken);
+        return OperationResult<TreasuryCategoryDto>.Ok(MapCategory(row));
+    }
+
+    private async Task<bool> IsCategoryAllowedAsync(string direction, string? category, string account, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(category) || TreasuryCategories.IsAllowed(direction, category, account))
+        {
+            return true;
+        }
+
+        // Items the owner added in Settings are cash-book items only.
+        if (account != TreasuryAccounts.Cash)
+        {
+            return false;
+        }
+
+        var row = await _db.TreasuryCategories.AsNoTracking().FirstOrDefaultAsync(x => x.Code == category, cancellationToken);
+        return row is not null && row.IsActive && row.Allows(direction);
+    }
+
+    private static TreasuryCategoryDto MapCategory(TreasuryCategory x)
+        => new(x.Id, x.Code, x.Name, x.Direction, x.IsActive, x.IsSystem, x.SortOrder);
 
     private static decimal Signed(TreasuryEntry row)
         => row.Direction == TreasuryDirections.In ? row.Amount : -row.Amount;

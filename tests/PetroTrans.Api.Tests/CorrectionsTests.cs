@@ -100,6 +100,50 @@ public class CorrectionsTests
     }
 
     [Fact]
+    public async Task TreasuryItems_OwnerCanAddRenameAndHide_AndOldMovementsKeepTheirItem()
+    {
+        await using var host = await TestHost.StartAsync();
+        await host.Client.PostAsJsonAsync("/api/auth/setup", TestHost.SampleSetup());
+        await host.Client.PostAsync("/api/auth/logout", null);
+        await host.Client.PostAsJsonAsync("/api/auth/login", new { userName = "father", password = "father1" });
+
+        var defaults = await host.Client.GetFromJsonAsync<CategoryResponse[]>("/api/treasury/categories", Json);
+        Assert.Contains(defaults!, x => x.Code == "utilities" && x.Direction == "out" && x.IsActive);
+        Assert.Contains(defaults!, x => x.Code == "other" && x.Direction == "both" && x.IsSystem);
+        Assert.Contains(defaults!, x => x.Code == "bank_fees" && x.Direction == "bank");
+
+        var created = await host.Client.PostAsJsonAsync("/api/treasury/categories", new { name = "ضيافة", direction = "out" });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var hospitality = (await created.Content.ReadFromJsonAsync<CategoryResponse>(Json))!;
+
+        object Entry(string direction, string category, string description = "حركة") => new
+        {
+            occurredOn = "2026-10-01",
+            direction,
+            category,
+            description,
+            amount = 50m,
+            notes = (string?)null
+        };
+
+        Assert.Equal(HttpStatusCode.Created, (await host.Client.PostAsJsonAsync("/api/treasury", Entry("out", hospitality.Code))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.Client.PostAsJsonAsync("/api/treasury", Entry("in", hospitality.Code))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.Client.PostAsJsonAsync("/api/treasury", Entry("out", "bank_fees"))).StatusCode);
+        var otherWithoutDescription = await host.Client.PostAsJsonAsync("/api/treasury", Entry("out", "other", ""));
+        Assert.Equal(HttpStatusCode.BadRequest, otherWithoutDescription.StatusCode);
+        Assert.Contains("غير ذلك", await otherWithoutDescription.Content.ReadAsStringAsync());
+
+        Assert.Equal(HttpStatusCode.OK, (await host.Client.PutAsJsonAsync($"/api/treasury/categories/{hospitality.Id}", new { name = "ضيافة وبوفيه", isActive = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.Client.PostAsJsonAsync("/api/treasury", Entry("out", hospitality.Code))).StatusCode);
+        var book = await host.Client.GetFromJsonAsync<TreasuryBookResponse>($"/api/treasury?category={hospitality.Code}", Json);
+        Assert.Equal(hospitality.Code, Assert.Single(book!.Entries).Category);
+
+        var other = defaults!.First(x => x.Code == "other");
+        Assert.Equal(HttpStatusCode.BadRequest, (await host.Client.PutAsJsonAsync($"/api/treasury/categories/{other.Id}", new { name = "أخرى", isActive = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await host.Client.PutAsJsonAsync($"/api/treasury/categories/{other.Id}", new { name = "أخرى", isActive = true })).StatusCode);
+    }
+
+    [Fact]
     public async Task Restore_SavesCurrentDataFirst_SoAWrongRestoreCanBeUndone()
     {
         await using var host = await TestHost.StartAsync();
@@ -308,6 +352,7 @@ public class CorrectionsTests
     private sealed record TreasuryBookResponse(decimal TotalIn, decimal TotalOut, decimal Balance, TreasuryRow[] Entries, decimal CategoryTotal = 0);
     private sealed record TreasuryRow(decimal RunningBalance, string? Category = null);
     private sealed record BackupStatusResponse(BackupFileResponse[] Backups);
+    private sealed record CategoryResponse(Guid Id, string Code, string Name, string Direction, bool IsActive, bool IsSystem);
     private sealed record BackupFileResponse(string FullPath, string Reason);
     private sealed record ReportResponse(string[] Columns, ReportKpi[]? Kpis);
     private sealed record ReportKpi(string Label, string Value);

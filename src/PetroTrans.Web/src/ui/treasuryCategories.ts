@@ -1,3 +1,6 @@
+import { useCallback, useEffect, useState } from 'react'
+import { fetchTreasuryCategories, type TreasuryCategory } from '../api/operations'
+
 // "bank_deposit" (cash → bank) and "bank_withdrawal" (bank → cash) are saved as transfers,
 // so the same amount shows up in the cash book and in the bank book at once.
 export const transferCategories = ['bank_deposit', 'bank_withdrawal'] as const
@@ -87,4 +90,25 @@ export function treasuryCategoryLabel(
     case 'other': return labels.other
     default: return labels.noCategory
   }
+}
+
+/**
+ * Loads the treasury items the owner manages in Settings. Names come from that list;
+ * the fixed labels above are only a fallback while it loads or for unknown codes.
+ */
+export function useTreasuryCategories() {
+  const [categories, setCategories] = useState<TreasuryCategory[]>([])
+  const reload = useCallback(async () => {
+    setCategories(await fetchTreasuryCategories())
+  }, [])
+
+  useEffect(() => {
+    void reload().catch(() => undefined)
+  }, [reload])
+
+  const names = new Map(categories.map((item) => [item.code, item.name]))
+  const forDirection = (direction: 'in' | 'out') =>
+    categories.filter((item) => item.isActive && (item.direction === direction || item.direction === 'both'))
+
+  return { categories, reload, names, forDirection }
 }

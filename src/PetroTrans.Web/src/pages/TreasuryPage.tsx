@@ -21,6 +21,7 @@ import {
   isTransferCategory,
   outgoingTreasuryCategories,
   treasuryCategoryLabel,
+  useTreasuryCategories,
 } from '../ui/treasuryCategories'
 
 type PrintSection = 'in' | 'out' | 'bank'
@@ -49,11 +50,14 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
   const [busy, setBusy] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<TreasuryEntry | null>(null)
 
-  const categories = direction === 'in' ? incomingTreasuryCategories : outgoingTreasuryCategories
+  const items = useTreasuryCategories()
+  const managed = items.forDirection(direction).map((item) => item.code)
+  const categories: readonly string[] = managed.length ? managed : direction === 'in' ? incomingTreasuryCategories : outgoingTreasuryCategories
   const bankCategories = bankDirection === 'in' ? bankIncomingCategories : bankOutgoingCategories
   const filtered = Boolean(book?.filterCategory)
-  const showIncoming = isIncomingTreasuryFilter(book?.filterCategory)
-  const showOutgoing = isOutgoingTreasuryFilter(book?.filterCategory)
+  const filterItem = items.categories.find((item) => item.code === book?.filterCategory)
+  const showIncoming = filterItem ? filterItem.direction === 'in' || filterItem.direction === 'both' : isIncomingTreasuryFilter(book?.filterCategory)
+  const showOutgoing = filterItem ? filterItem.direction === 'out' || filterItem.direction === 'both' : isOutgoingTreasuryFilter(book?.filterCategory)
   const incoming = book?.entries.filter((row) => row.direction === 'in') ?? []
   const outgoing = book?.entries.filter((row) => row.direction === 'out') ?? []
 
@@ -71,7 +75,7 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
   }, [])
 
   function categoryLabel(code: string | null) {
-    return treasuryCategoryLabel(code, t.treasury)
+    return items.names.get(code ?? '') ?? treasuryCategoryLabel(code, t.treasury)
   }
 
   function printPath(section: PrintSection) {
@@ -289,9 +293,29 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
           <span>{t.treasury.category}</span>
           <select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
             <option value="">{t.treasury.allCategories}</option>
-            {allTreasuryCategories.map((item) => (
-              <option key={item} value={item}>{categoryLabel(item)}</option>
-            ))}
+            {items.categories.length ? (
+              <>
+                <optgroup label={t.treasury.incoming}>
+                  {items.categories.filter((item) => item.direction === 'in').map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label={t.treasury.outgoing}>
+                  {items.categories.filter((item) => item.direction === 'out').map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label={t.treasury.bankName}>
+                  {items.categories.filter((item) => item.direction === 'bank' || item.direction === 'both').map((item) => (
+                    <option key={item.code} value={item.code}>{item.name}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              allTreasuryCategories.map((item) => (
+                <option key={item} value={item}>{categoryLabel(item)}</option>
+              ))
+            )}
           </select>
         </label>
         <button className="btn-secondary" type="submit">{t.treasury.show}</button>
@@ -324,7 +348,7 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
               onChange={(event) => {
                 const next = event.target.value === 'out' ? 'out' : 'in'
                 setDirection(next)
-                setCategory(next === 'in' ? 'sales' : 'salaries')
+                setCategory(items.forDirection(next)[0]?.code ?? (next === 'in' ? 'sales' : 'salaries'))
               }}
             >
               <option value="in">{t.treasury.incoming}</option>
@@ -346,7 +370,13 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
         </div>
         <label className="field">
           <span>{t.treasury.description}</span>
-          <input value={description} onChange={(event) => setDescription(event.target.value)} required={!isTransferCategory(category)} />
+          <input
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            required={!isTransferCategory(category)}
+            placeholder={category === 'other' ? t.treasury.otherHint : undefined}
+          />
+          {category === 'other' ? <small className="field-hint">{t.treasury.otherHint}</small> : null}
         </label>
         <label className="field">
           <span>{t.treasury.notes}</span>

@@ -77,6 +77,9 @@ public static class OperationsEndpoints
         app.MapGet("/api/treasury", (Delegate)TreasuryBook).RequireAuthorization($"perm:{PermissionCodes.TreasuryView}");
         app.MapPost("/api/treasury", (Delegate)CreateTreasury).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
         app.MapPost("/api/treasury/transfer", (Delegate)CreateTreasuryTransfer).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
+        app.MapGet("/api/treasury/categories", (Delegate)TreasuryCategories).RequireAuthorization();
+        app.MapPost("/api/treasury/categories", (Delegate)CreateTreasuryCategory).RequireAuthorization($"perm:{PermissionCodes.SettingsManage}");
+        app.MapPut("/api/treasury/categories/{id:guid}", (Delegate)UpdateTreasuryCategory).RequireAuthorization($"perm:{PermissionCodes.SettingsManage}");
         app.MapDelete("/api/treasury/{id:guid}", (Delegate)DeleteTreasury).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
     }
 
@@ -230,6 +233,15 @@ public static class OperationsEndpoints
 
     private static async Task<IResult> CreateTreasury(SaveTreasuryEntryRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
         => From(await treasury.CreateAsync(request, CurrentUser.RequireId(http), ct), 201);
+
+    private static async Task<IResult> TreasuryCategories(ITreasuryService treasury, CancellationToken ct)
+        => Results.Json(await treasury.ListCategoriesAsync(ct));
+
+    private static async Task<IResult> CreateTreasuryCategory(SaveTreasuryCategoryRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
+        => From(await treasury.CreateCategoryAsync(request, CurrentUser.RequireId(http), ct), 201);
+
+    private static async Task<IResult> UpdateTreasuryCategory(Guid id, SaveTreasuryCategoryRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
+        => From(await treasury.UpdateCategoryAsync(id, request, CurrentUser.RequireId(http), ct));
 
     private static async Task<IResult> CreateTreasuryTransfer(SaveBankTransferRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct)
         => From(await treasury.CreateTransferAsync(request, CurrentUser.RequireId(http), ct), 201);

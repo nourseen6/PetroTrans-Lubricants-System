@@ -326,8 +326,22 @@ public sealed record SaveBankTransferRequest(
     string? Description,
     string? Notes);
 
+public sealed record TreasuryCategoryDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string Direction,
+    bool IsActive,
+    bool IsSystem,
+    int SortOrder);
+
+public sealed record SaveTreasuryCategoryRequest(string Name, string? Direction, bool IsActive = true);
+
 public interface ITreasuryService
 {
+    Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryCategoryDto>> CreateCategoryAsync(SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryCategoryDto>> UpdateCategoryAsync(Guid id, SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default, string? account = null);
     Task<OperationResult<TreasuryEntryDto>> CreateAsync(SaveTreasuryEntryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<bool>> CreateTransferAsync(SaveBankTransferRequest request, Guid actorUserId, CancellationToken cancellationToken = default);

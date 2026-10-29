@@ -1493,3 +1493,108 @@ a {
 .toolbar .field input[type='date'] {
   flex: none;
 }
+
+.field-hint {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.data-table tr.row-muted td {
+  color: var(--muted);
+}
+
+.data-table td.row-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 6px;
+}
+
+/* Compact sheets (price list, stock count): long product lists in smaller type so they fit A4. */
+.print-sheet.print-compact {
+  font-size: 15px;
+}
+
+.print-sheet.print-compact h1 {
+  font-size: 28px;
+}
+
+.print-sheet.print-compact h2 {
+  font-size: 20px;
+}
+
+.print-sheet.print-compact .print-logo {
+  height: 64px;
+}
+
+.print-sheet.print-compact .print-meta p {
+  font-size: 16px;
+}
+
+.print-sheet.print-compact table {
+  font-size: 14px;
+}
+
+.print-sheet.print-compact th,
+.print-sheet.print-compact td {
+  padding: 4px 6px;
+  border-width: 1px;
+}
+
+.print-sheet .col-no {
+  width: 32px;
+  text-align: center;
+}
+
+.print-sheet .col-blank {
+  width: 95px;
+}
+
+.print-sheet tr.print-group-row td {
+  background: #e6e6e6;
+  font-weight: 900;
+}
+
+.print-sheet tr.print-total-row td {
+  font-weight: 900;
+  border-top-width: 2px;
+}
+
+.print-sheet tr.print-total-row td:first-child {
+  text-align: end;
+}
+
+.print-sheet tr.print-empty-stock td {
+  color: #666;
+}
+
+.print-date-note {
+  margin: 0 0 8px;
+  text-align: end;
+}
+
+.print-fill-lines {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 12px;
+}
+
+.print-fill-lines span {
+  border-bottom: 1px dashed #000;
+  padding-bottom: 12px;
+}
+
+.print-fill-lines.print-signatures {
+  margin-top: 22px;
+}
+
+.print-fill-lines.print-signatures span {
+  padding-bottom: 32px;
+}
+
+.print-two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}

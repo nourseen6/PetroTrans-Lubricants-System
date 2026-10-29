@@ -19,9 +19,10 @@ import { formatDate, formatMoney, parseAmount } from '../ui/format'
 import { Icon } from '../ui/Icons'
 import { groupByCatalogCategory } from '../ui/catalogGroups'
 
-export function PricingPage() {
+export function PricingPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { t } = useLocale()
   const [query, setQuery] = useState('')
+  const [printCustomerId, setPrintCustomerId] = useState('')
   const [rows, setRows] = useState<PricingMatrixRow[]>([])
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [selected, setSelected] = useState<PricingMatrixRow | null>(null)
@@ -277,6 +278,19 @@ export function PricingPage() {
           <Icon name="search" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.pricing.search} />
         </label>
+        <select value={printCustomerId} onChange={(event) => setPrintCustomerId(event.target.value)} title={t.pricing.printFor}>
+          <option value="">{t.pricing.printForAll}</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>{customer.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => onNavigate(printCustomerId ? `/print/price-list?customer=${printCustomerId}` : '/print/price-list')}
+        >
+          {t.pricing.printList}
+        </button>
       </div>
       {rows.length === 0 ? (
         <EmptyState title={t.products.empty} />

@@ -26,8 +26,9 @@ import { formatDate, formatMoney, todayIso, movementLabel, parseAmount } from '.
 import { Typeahead } from '../ui/Typeahead'
 import { groupByCatalogCategory } from '../ui/catalogGroups'
 
-export function InventoryPage() {
+export function InventoryPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { t } = useLocale()
+  const [printWarehouseId, setPrintWarehouseId] = useState('')
   const [error, setError] = useState<unknown>(null)
   const [stock, setStock] = useState<StockRow[]>([])
   const [moves, setMoves] = useState<MovementRow[]>([])
@@ -144,7 +145,22 @@ export function InventoryPage() {
       <h1 className="page-title">{t.nav.inventory}</h1>
       <ErrorBanner error={error} onRetry={() => void refresh()} />
 
-      <h2 className="editor-title">{t.ops.stock}</h2>
+      <div className="panel-head">
+        <h2 className="editor-title">{t.ops.stock}</h2>
+        <div className="toolbar">
+          <select value={printWarehouseId} onChange={(event) => setPrintWarehouseId(event.target.value)} title={t.ops.printStockFor}>
+            <option value="">{t.ops.allWarehouses}</option>
+            {warehouses.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+          </select>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => onNavigate(printWarehouseId ? `/print/stock?warehouse=${printWarehouseId}` : '/print/stock')}
+          >
+            {t.ops.printStock}
+          </button>
+        </div>
+      </div>
       {stock.length === 0 ? (
         <EmptyState title={t.ops.emptyStock} />
       ) : (

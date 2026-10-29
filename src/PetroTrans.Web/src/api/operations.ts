@@ -383,6 +383,22 @@ export const createTreasuryEntry = (body: {
   account?: TreasuryAccount
 }) => api<TreasuryEntry>('/api/treasury', { method: 'POST', body: JSON.stringify(body) })
 
+export type TreasuryCategory = {
+  id: string
+  code: string
+  name: string
+  direction: 'in' | 'out' | 'both' | 'bank'
+  isActive: boolean
+  isSystem: boolean
+  sortOrder: number
+}
+
+export const fetchTreasuryCategories = () => api<TreasuryCategory[]>('/api/treasury/categories')
+export const createTreasuryCategory = (name: string, direction: 'in' | 'out') =>
+  api<TreasuryCategory>('/api/treasury/categories', { method: 'POST', body: JSON.stringify({ name, direction }) })
+export const updateTreasuryCategory = (id: string, name: string, isActive: boolean) =>
+  api<TreasuryCategory>(`/api/treasury/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name, isActive }) })
+
 export const createBankTransfer = (body: {
   occurredOn: string
   direction: 'to_bank' | 'from_bank'
