@@ -21,6 +21,8 @@ export type RouteId =
   | 'print-bill'
   | 'print-supplier-statement'
   | 'print-treasury'
+  | 'print-price-list'
+  | 'print-stock'
   | 'customer-file'
   | 'not-found'
 
@@ -45,6 +47,8 @@ export function pathToRoute(pathname: string): RouteId {
   if (normalized.startsWith('/print/supplier-statement/')) return 'print-supplier-statement'
   if (normalized.startsWith('/print/statement/')) return 'print-statement'
   if (normalized.startsWith('/print/treasury')) return 'print-treasury'
+  if (normalized.startsWith('/print/price-list')) return 'print-price-list'
+  if (normalized.startsWith('/print/stock')) return 'print-stock'
   if (normalized.startsWith('/print/report')) return 'print-report'
   if (normalized.startsWith('/print/receipt/')) return 'print-receipt'
   if (normalized.startsWith('/print/bill/')) return 'print-bill'

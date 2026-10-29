@@ -174,6 +174,23 @@ export const backupDb = (destinationPath: string) => api<string>('/api/backup', 
 export const restoreDb = (sourcePath: string, confirm: boolean) =>
   api<string>('/api/restore', { method: 'POST', body: JSON.stringify({ sourcePath, confirm }) })
 
+export type BackupFile = { fileName: string; fullPath: string; createdAt: string; sizeBytes: number; reason: string }
+export type BackupStatus = {
+  lastSuccessAt: string | null
+  lastError: string | null
+  secondaryFolder: string | null
+  lastSecondaryAt: string | null
+  lastSecondaryError: string | null
+  liveDatabaseOk: boolean
+  backupFolder: string
+  suggestedSecondaryFolder: string | null
+  backups: BackupFile[]
+}
+export const fetchBackupStatus = () => api<BackupStatus>('/api/backup/status')
+export const backupNow = () => api<BackupStatus>('/api/backup/now', { method: 'POST' })
+export const saveBackupSettings = (secondaryFolder: string | null) =>
+  api<BackupStatus>('/api/backup/settings', { method: 'PUT', body: JSON.stringify({ secondaryFolder }) })
+
 export const fetchOnHand = (warehouseId?: string) =>
   api<StockRow[]>(`/api/inventory/on-hand${warehouseId ? `?warehouseId=${warehouseId}` : ''}`)
 export const fetchMovements = () => api<MovementRow[]>('/api/inventory/movements')
@@ -327,7 +344,11 @@ export type TreasuryEntry = {
   notes: string | null
   runningBalance: number
   linked?: boolean
+  account?: TreasuryAccount
+  isTransfer?: boolean
 }
+
+export type TreasuryAccount = 'cash' | 'bank'
 
 export type TreasuryBook = {
   from: string | null
@@ -339,13 +360,15 @@ export type TreasuryBook = {
   entries: TreasuryEntry[]
   filterCategory?: string | null
   categoryTotal?: number
+  account?: TreasuryAccount
 }
 
-export const fetchTreasury = (from?: string, to?: string, category?: string) => {
+export const fetchTreasury = (from?: string, to?: string, category?: string, account: TreasuryAccount = 'cash') => {
   const params = new URLSearchParams()
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (category) params.set('category', category)
+  if (account !== 'cash') params.set('account', account)
   const query = params.toString() ? `?${params}` : ''
   return api<TreasuryBook>(`/api/treasury${query}`)
 }
@@ -357,6 +380,31 @@ export const createTreasuryEntry = (body: {
   description: string
   amount: number
   notes: string | null
+  account?: TreasuryAccount
 }) => api<TreasuryEntry>('/api/treasury', { method: 'POST', body: JSON.stringify(body) })
+
+export type TreasuryCategory = {
+  id: string
+  code: string
+  name: string
+  direction: 'in' | 'out' | 'both' | 'bank'
+  isActive: boolean
+  isSystem: boolean
+  sortOrder: number
+}
+
+export const fetchTreasuryCategories = () => api<TreasuryCategory[]>('/api/treasury/categories')
+export const createTreasuryCategory = (name: string, direction: 'in' | 'out') =>
+  api<TreasuryCategory>('/api/treasury/categories', { method: 'POST', body: JSON.stringify({ name, direction }) })
+export const updateTreasuryCategory = (id: string, name: string, isActive: boolean) =>
+  api<TreasuryCategory>(`/api/treasury/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name, isActive }) })
+
+export const createBankTransfer = (body: {
+  occurredOn: string
+  direction: 'to_bank' | 'from_bank'
+  amount: number
+  description: string | null
+  notes: string | null
+}) => api<boolean>('/api/treasury/transfer', { method: 'POST', body: JSON.stringify(body) })
 
 export const deleteTreasuryEntry = (id: string) => api<boolean>(`/api/treasury/${id}`, { method: 'DELETE' })

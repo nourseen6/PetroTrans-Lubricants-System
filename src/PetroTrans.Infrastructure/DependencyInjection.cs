@@ -6,6 +6,7 @@ using PetroTrans.Application.Identity;
 using PetroTrans.Application.Operations;
 using PetroTrans.Application.Sales;
 using PetroTrans.Infrastructure.Assistant;
+using PetroTrans.Infrastructure.Backup;
 using PetroTrans.Infrastructure.Catalog;
 using PetroTrans.Infrastructure.Identity;
 using PetroTrans.Infrastructure.Operations;
@@ -19,6 +20,7 @@ public static class InfrastructureServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, string sqliteConnectionString, string databasePath)
     {
         services.AddSingleton(new SqliteRuntime(databasePath));
+        services.AddSingleton(new BackupManager(databasePath));
         services.AddDbContext<AppDbContext>(options =>
         {
             options.UseSqlite(sqliteConnectionString);

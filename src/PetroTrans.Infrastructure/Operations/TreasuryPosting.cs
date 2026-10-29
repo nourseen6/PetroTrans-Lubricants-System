@@ -18,7 +18,8 @@ internal static class TreasuryPosting
         decimal amount,
         string sourceType,
         Guid sourceId,
-        string? notes = null)
+        string? notes = null,
+        string account = TreasuryAccounts.Cash)
     {
         if (db.TreasuryEntries.Local.Any(x => x.SourceDocumentId == sourceId))
         {
@@ -34,6 +35,7 @@ internal static class TreasuryPosting
         {
             Id = UuidV7.New(),
             OccurredOn = occurredOn.Date,
+            Account = account,
             Direction = direction,
             Category = category,
             Description = description.Length <= 256 ? description : description[..256],
@@ -111,17 +113,19 @@ internal static class TreasuryPosting
 
     public static void QueueCustomerPayment(AppDbContext db, Guid actorUserId, DateTime paidOn, string customerName, decimal amount, Guid paymentId, string? methodName = null)
     {
+        // A bank transfer lands in the bank book, not in the office cash box.
         var bank = TreasuryCategories.LooksLikeBank(methodName);
         Queue(
             db,
             actorUserId,
             paidOn,
             TreasuryDirections.In,
-            bank ? TreasuryCategories.BankDeposit : TreasuryCategories.Sales,
+            TreasuryCategories.Sales,
             bank ? $"تحصيل بنكي من {customerName}" : $"تحصيل من {customerName}",
             amount,
             SourceDocumentTypes.Payment,
-            paymentId);
+            paymentId,
+            account: bank ? TreasuryAccounts.Bank : TreasuryAccounts.Cash);
     }
 
     public static void QueueSupplierPayment(AppDbContext db, Guid actorUserId, DateTime paidOn, string supplierName, decimal amount, Guid paymentId, string? methodName = null)
@@ -132,10 +136,11 @@ internal static class TreasuryPosting
             actorUserId,
             paidOn,
             TreasuryDirections.Out,
-            bank ? TreasuryCategories.BankDeposit : TreasuryCategories.SupplierPayment,
+            TreasuryCategories.SupplierPayment,
             bank ? $"سداد بنكي للمورد {supplierName}" : $"سداد للمورد {supplierName}",
             amount,
             SourceDocumentTypes.SupplierPayment,
-            paymentId);
+            paymentId,
+            account: bank ? TreasuryAccounts.Bank : TreasuryAccounts.Cash);
     }
 }

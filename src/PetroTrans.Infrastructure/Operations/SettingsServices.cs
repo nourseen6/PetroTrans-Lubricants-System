@@ -8,6 +8,7 @@ using PetroTrans.Domain.Identity;
 using PetroTrans.Domain.Inventory;
 using PetroTrans.Domain.Settings;
 using PetroTrans.Infrastructure.Assets;
+using PetroTrans.Infrastructure.Backup;
 using PetroTrans.Infrastructure.Persistence;
 
 namespace PetroTrans.Infrastructure.Operations;
@@ -136,11 +137,13 @@ public sealed class SettingsService : ISettingsService
 {
     private readonly AppDbContext _db;
     private readonly SqliteRuntime _sqlite;
+    private readonly BackupManager _backups;
 
-    public SettingsService(AppDbContext db, SqliteRuntime sqlite)
+    public SettingsService(AppDbContext db, SqliteRuntime sqlite, BackupManager backups)
     {
         _db = db;
         _sqlite = sqlite;
+        _backups = backups;
     }
 
     public async Task<CompanySettingsDto> GetCompanyAsync(CancellationToken cancellationToken = default)
@@ -246,10 +249,13 @@ public sealed class SettingsService : ISettingsService
             return OperationResult<string>.Fail("اختر مسار النسخة الاحتياطية.");
         }
 
-        var dest = Path.GetFullPath(destinationPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(dest) ?? dest);
-        await _db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(FULL);", cancellationToken);
-        File.Copy(_sqlite.DatabasePath, dest, overwrite: true);
+        var copied = _backups.CopyTo(destinationPath);
+        if (!copied.Ok || copied.Path is null)
+        {
+            return OperationResult<string>.Fail(copied.Error ?? "تعذر أخذ النسخة الاحتياطية.");
+        }
+
+        var dest = copied.Path;
         _db.AuditLogs.Add(Audits.Create(actorUserId, "backup.create", "database", null, null, new { dest }));
         await _db.SaveChangesAsync(cancellationToken);
         return OperationResult<string>.Ok(dest);
@@ -267,20 +273,16 @@ public sealed class SettingsService : ISettingsService
             return OperationResult<string>.Fail("ملف النسخة غير صالح.");
         }
 
-        try
-        {
-            await using var probe = new SqliteConnection($"Data Source={sourcePath}");
-            await probe.OpenAsync(cancellationToken);
-            await using var cmd = probe.CreateCommand();
-            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='users'";
-            if (await cmd.ExecuteScalarAsync(cancellationToken) is null)
-            {
-                return OperationResult<string>.Fail("ملف النسخة غير صالح.");
-            }
-        }
-        catch
+        if (!_backups.IsBackupFile(sourcePath))
         {
             return OperationResult<string>.Fail("ملف النسخة غير صالح.");
+        }
+
+        // Keep a copy of the current data first, so restoring the wrong file can be undone.
+        var safety = _backups.CreateBackup("before-restore");
+        if (!safety.Ok)
+        {
+            return OperationResult<string>.Fail($"لم يتم الاسترجاع لأنه تعذر حفظ نسخة من البيانات الحالية أولاً. {safety.Error}");
         }
 
         var live = _sqlite.DatabasePath;

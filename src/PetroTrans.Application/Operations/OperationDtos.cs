@@ -291,7 +291,9 @@ public sealed record TreasuryEntryDto(
     decimal Amount,
     string? Notes,
     decimal RunningBalance,
-    bool Linked = false);
+    bool Linked = false,
+    string Account = "cash",
+    bool IsTransfer = false);
 
 public sealed record TreasuryBookDto(
     DateTime? From,
@@ -302,7 +304,8 @@ public sealed record TreasuryBookDto(
     decimal Balance,
     IReadOnlyList<TreasuryEntryDto> Entries,
     string? FilterCategory = null,
-    decimal CategoryTotal = 0);
+    decimal CategoryTotal = 0,
+    string Account = "cash");
 
 public sealed record SaveTreasuryEntryRequest(
     DateTime OccurredOn,
@@ -312,11 +315,35 @@ public sealed record SaveTreasuryEntryRequest(
     decimal Amount,
     string? Notes,
     string? SourceDocumentType = null,
-    Guid? SourceDocumentId = null);
+    Guid? SourceDocumentId = null,
+    string? Account = null);
+
+/// <summary>Moves money between the office cash box and the bank. Direction is "to_bank" or "from_bank".</summary>
+public sealed record SaveBankTransferRequest(
+    DateTime OccurredOn,
+    string Direction,
+    decimal Amount,
+    string? Description,
+    string? Notes);
+
+public sealed record TreasuryCategoryDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string Direction,
+    bool IsActive,
+    bool IsSystem,
+    int SortOrder);
+
+public sealed record SaveTreasuryCategoryRequest(string Name, string? Direction, bool IsActive = true);
 
 public interface ITreasuryService
 {
-    Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryCategoryDto>> CreateCategoryAsync(SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryCategoryDto>> UpdateCategoryAsync(Guid id, SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default, string? account = null);
     Task<OperationResult<TreasuryEntryDto>> CreateAsync(SaveTreasuryEntryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<OperationResult<bool>> CreateTransferAsync(SaveBankTransferRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<bool>> DeleteAsync(Guid id, Guid actorUserId, CancellationToken cancellationToken = default);
 }

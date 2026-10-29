@@ -3,7 +3,6 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Windows;
-using System.Windows.Media;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
@@ -33,29 +32,12 @@ public partial class MainWindow : Window
         Left = work.Left + 8;
         Top = work.Top + 8;
         WindowState = WindowState.Normal;
-        SizeChanged += (_, _) => ApplyContentScale();
     }
 
-    private void ApplyContentScale()
-    {
-        if (WebView.CoreWebView2 is null || ActualWidth < 50 || ActualHeight < 50)
-        {
-            return;
-        }
-
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var zoom = Math.Min(ActualWidth / 1366.0, ActualHeight / 768.0);
-        if (dpi > 1.05)
-        {
-            zoom /= dpi;
-        }
-
-        zoom = Math.Clamp(zoom, 0.5, 1.0);
-        if (Math.Abs(WebView.ZoomFactor - zoom) > 0.01)
-        {
-            WebView.ZoomFactor = zoom;
-        }
-    }
+    // The page is drawn at 100%: WebView2 already follows the Windows display scaling, and the
+    // screens rearrange themselves for the window size. Shrinking the page to fit a fixed design
+    // size made text tiny on scaled laptops and different on every machine. Ctrl + mouse wheel
+    // still lets the user enlarge or shrink everything.
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -77,7 +59,6 @@ public partial class MainWindow : Window
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             await WebView.EnsureCoreWebView2Async(env);
             ConfigureWebView();
-            ApplyContentScale();
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             WebView.CoreWebView2.Navigate(url);
@@ -190,7 +171,6 @@ public partial class MainWindow : Window
             {
                 StatusText.Visibility = Visibility.Collapsed;
                 WebView.Visibility = Visibility.Visible;
-                ApplyContentScale();
             }
             else
             {
@@ -221,6 +201,7 @@ public partial class MainWindow : Window
         _api = null;
         if (api is not null)
         {
+            PetroTransApiHost.BackupOnClose(api);
             _ = StopApiAsync(api);
         }
     }

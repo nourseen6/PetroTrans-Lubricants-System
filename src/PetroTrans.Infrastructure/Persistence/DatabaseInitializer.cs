@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PetroTrans.Infrastructure.Catalog;
 using PetroTrans.Infrastructure.Identity;
+using PetroTrans.Infrastructure.Operations;
 using PetroTrans.Infrastructure.Persistence;
 
 namespace PetroTrans.Infrastructure.Persistence;
@@ -13,5 +14,6 @@ public static class DatabaseInitializer
         await IdentityCatalogSeeder.SeedAsync(db, cancellationToken);
         await NumberSeriesSeeder.SeedAsync(db, cancellationToken);
         await PaymentAllocationBackfill.EnsureAsync(db, cancellationToken);
+        await TreasuryCategorySeeder.SeedAsync(db, cancellationToken);
     }
 }

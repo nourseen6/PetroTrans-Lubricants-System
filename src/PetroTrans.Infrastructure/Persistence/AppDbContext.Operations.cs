@@ -33,6 +33,7 @@ public sealed partial class AppDbContext
     public DbSet<CompanySettings> CompanySettings => Set<CompanySettings>();
     public DbSet<AssistantDraft> AssistantDrafts => Set<AssistantDraft>();
     public DbSet<TreasuryEntry> TreasuryEntries => Set<TreasuryEntry>();
+    public DbSet<TreasuryCategory> TreasuryCategories => Set<TreasuryCategory>();
 
     private void ConfigureOperations(ModelBuilder modelBuilder)
     {
@@ -342,6 +343,7 @@ public sealed partial class AppDbContext
             entity.ToTable("treasury_entries");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.OccurredOn).HasColumnName("occurred_on").IsRequired();
+            entity.Property(x => x.Account).HasColumnName("account").HasMaxLength(8).IsRequired();
             entity.Property(x => x.Direction).HasColumnName("direction").HasMaxLength(8).IsRequired();
             entity.Property(x => x.Category).HasColumnName("category").HasMaxLength(32);
             entity.Property(x => x.Description).HasColumnName("description").HasMaxLength(256).IsRequired();
@@ -353,6 +355,20 @@ public sealed partial class AppDbContext
             entity.HasIndex(x => x.OccurredOn).HasDatabaseName("ix_treasury_entries_occurred_on");
             entity.HasIndex(x => new { x.SourceDocumentType, x.SourceDocumentId })
                 .HasDatabaseName("ix_treasury_entries_source");
+        });
+
+        modelBuilder.Entity<TreasuryCategory>(entity =>
+        {
+            entity.ToTable("treasury_categories");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasColumnName("code").HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Name).HasColumnName("name").HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Direction).HasColumnName("direction").HasMaxLength(8).IsRequired();
+            entity.Property(x => x.IsActive).HasColumnName("is_active").IsRequired();
+            entity.Property(x => x.IsSystem).HasColumnName("is_system").IsRequired();
+            entity.Property(x => x.SortOrder).HasColumnName("sort_order").IsRequired();
+            MapAudit(entity);
+            entity.HasIndex(x => x.Code).IsUnique().HasDatabaseName("ux_treasury_categories_code");
         });
     }
 }

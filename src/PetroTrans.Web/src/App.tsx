@@ -12,6 +12,7 @@ import { CustomersPage } from './pages/CustomersPage'
 import { CustomerFilePage } from './pages/CustomerFilePage'
 import { PrintInvoicePage } from './pages/PrintInvoicePage'
 import { PrintPaymentPage, PrintStatementPage, PrintSupplierStatementPage, PrintTreasuryPage, PrintReportPage, PrintReceiptPage, PrintBillPage } from './pages/PrintDocumentsPage'
+import { PrintPriceListPage, PrintStockPage } from './pages/PrintCatalogPages'
 import { ProductsPage } from './pages/ProductsPage'
 import { PricingPage } from './pages/PricingPage'
 import { PurchasingPage } from './pages/PurchasingPage'
@@ -142,9 +143,9 @@ export default function App() {
     ) : route === 'products' ? (
       <ProductsPage />
     ) : route === 'pricing' ? (
-      <PricingPage />
+      <PricingPage onNavigate={navigate} />
     ) : route === 'inventory' ? (
-      <InventoryPage />
+      <InventoryPage onNavigate={navigate} />
     ) : route === 'purchasing' ? (
       <PurchasingPage onNavigate={navigate} />
     ) : route === 'treasury' ? (
@@ -188,6 +189,10 @@ export default function App() {
         <PrintSupplierStatementPage supplierId={printSupplierStatementIdFromPath(path)} />
       ) : route === 'print-treasury' ? (
         <PrintTreasuryPage />
+      ) : route === 'print-price-list' ? (
+        <PrintPriceListPage />
+      ) : route === 'print-stock' ? (
+        <PrintStockPage />
       ) : route === 'print-report' ? (
         <PrintReportPage />
       ) : route === 'print-receipt' ? (

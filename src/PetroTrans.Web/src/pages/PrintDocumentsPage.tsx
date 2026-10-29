@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { fetchCompany, fetchPayment, fetchStatement, fetchSupplierStatement, fetchTreasury, fetchBill, fetchReceipt, fetchReport, type CompanySettings, type PaymentDetail, type Statement, type SupplierStatement, type TreasuryBook, type Report } from '../api/operations'
 import { displayKpiValue, displayReportCell, formatDate, formatMoney } from '../ui/format'
 import { requestPdf, requestPrint } from '../ui/print'
-import { treasuryCategoryLabel } from '../ui/treasuryCategories'
+import { treasuryCategoryLabel, useTreasuryCategories } from '../ui/treasuryCategories'
 
 function PrintChrome({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -337,6 +337,8 @@ const treasuryPrintLabels = {
   carExpense: 'مصاريف سيارة',
   withdrawal: 'مسحوبات',
   bankDeposit: 'إيداع بنك',
+  bankWithdrawal: 'سحب من البنك',
+  bankFees: 'مصاريف بنكية',
   supplierPayment: 'سداد مورد',
   other: 'غير ذلك',
   noCategory: 'بدون تصنيف',
@@ -406,106 +408,148 @@ export function PrintSupplierStatementPage({ supplierId }: { supplierId: string 
 }
 
 export function PrintTreasuryPage() {
+  const items = useTreasuryCategories()
+  const label = (code: string | null) => items.names.get(code ?? '') ?? printTreasuryCategoryLabel(code)
   const params = new URLSearchParams(window.location.search)
   const from = params.get('from') ?? undefined
   const to = params.get('to') ?? undefined
   const category = params.get('category') ?? undefined
+  const sectionParam = params.get('section')
+  const section = sectionParam === 'in' || sectionParam === 'out' || sectionParam === 'bank' ? sectionParam : null
   const [book, setBook] = useState<TreasuryBook | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [error, setError] = useState<unknown>(null)
   useEffect(() => {
-    void Promise.all([fetchTreasury(from, to, category), fetchCompany()])
+    const account = section === 'bank' ? 'bank' : 'cash'
+    void Promise.all([fetchTreasury(from, to, section === 'bank' ? undefined : category, account), fetchCompany()])
       .then(([next, nextCompany]) => {
         setBook(next)
         setCompany(nextCompany)
       })
       .catch((err: unknown) => setError(err))
-  }, [from, to, category])
+  }, [from, to, category, section])
   if (error) return <p className="banner error">تعذر تحميل الخزينة.</p>
   if (!book || !company) return <p className="muted">جاري التحميل…</p>
   const incoming = book.entries.filter((row) => row.direction === 'in')
   const outgoing = book.entries.filter((row) => row.direction === 'out')
   const filtered = Boolean(book.filterCategory)
-  const categoryName = printTreasuryCategoryLabel(book.filterCategory ?? null)
+  const categoryName = label(book.filterCategory ?? null)
+  const period = `الفترة: من ${from ? formatDate(from) : 'البداية'} إلى ${to ? formatDate(to) : 'اليوم'}`
+  const showIn = section !== 'out' && section !== 'bank' && !(filtered && incoming.length === 0)
+  const showOut = section !== 'in' && section !== 'bank' && !(filtered && outgoing.length === 0)
+
+  const title = section === 'bank'
+    ? 'كشف بنك مصر'
+    : section === 'in'
+      ? 'كشف الوارد'
+      : section === 'out'
+        ? 'كشف المنصرف'
+        : filtered ? `تقرير ${categoryName}` : 'كشف الخزينة'
+  const subtitle = section === 'bank'
+    ? 'كشف حساب بنك مصر'
+    : filtered
+      ? `${section === 'in' ? 'الوارد' : section === 'out' ? 'المنصرف' : 'تقرير البند'} — ${categoryName}`
+      : section === 'in'
+        ? 'كشف الخزينة — الوارد'
+        : section === 'out'
+          ? 'كشف الخزينة — المنصرف'
+          : 'كشف الخزينة — الوارد والمنصرف'
+
+  function rowsTable(rows: TreasuryBook['entries']) {
+    return (
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>البيان</th>
+            <th>التصنيف</th>
+            <th>المبلغ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{formatDate(row.occurredOn)}</td>
+              <td>{row.description}</td>
+              <td>{label(row.category)}</td>
+              <td>{formatMoney(row.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    )
+  }
+
   return (
-    <PrintChrome title={filtered ? `تقرير ${categoryName}` : 'كشف الخزينة'}>
+    <PrintChrome title={title}>
       <header className="print-header">
         {company.logoUrl ? <img src={company.logoUrl} alt="" className="print-logo" /> : null}
         <div>
           <h1>{company.companyName}</h1>
-          <h2>{filtered ? `تقرير البند — ${categoryName}` : 'كشف الخزينة — الوارد والمنصرف'}</h2>
+          <h2>{subtitle}</h2>
         </div>
       </header>
       <div className="print-meta">
-        {filtered ? (
-          <p>إجمالي البند: {formatMoney(book.categoryTotal ?? 0)}</p>
-        ) : (
+        <p>{period}</p>
+        {section === 'bank' || (!filtered && section === null) ? (
           <>
             <p>رصيد سابق: {formatMoney(book.openingBalance)}</p>
             <p>إجمالي الوارد: {formatMoney(book.totalIn)}</p>
             <p>إجمالي المنصرف: {formatMoney(book.totalOut)}</p>
             <p>الرصيد: {formatMoney(book.balance)}</p>
           </>
+        ) : section === 'in' ? (
+          <p>إجمالي الوارد: {formatMoney(incoming.reduce((sum, row) => sum + row.amount, 0))}</p>
+        ) : section === 'out' ? (
+          <p>إجمالي المنصرف: {formatMoney(outgoing.reduce((sum, row) => sum + row.amount, 0))}</p>
+        ) : (
+          <p>إجمالي البند: {formatMoney(book.categoryTotal ?? 0)}</p>
         )}
       </div>
-      {filtered && incoming.length === 0 ? null : (
-      <section className="print-block">
-        <h2>الوارد</h2>
-        {incoming.length === 0 ? (
-          <p>لا يوجد وارد في الفترة.</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>البيان</th>
-                <th>التصنيف</th>
-                <th>المبلغ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {incoming.map((row) => (
-                <tr key={row.id}>
-                  <td>{formatDate(row.occurredOn)}</td>
-                  <td>{row.description}</td>
-                  <td>{printTreasuryCategoryLabel(row.category)}</td>
-                  <td>{formatMoney(row.amount)}</td>
+      {section === 'bank' ? (
+        <section className="print-block">
+          {book.entries.length === 0 ? (
+            <p>لا توجد حركات في البنك في الفترة.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>التاريخ</th>
+                  <th>البيان</th>
+                  <th>التصنيف</th>
+                  <th>وارد</th>
+                  <th>منصرف</th>
+                  <th>الرصيد</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-      )}
-      {filtered && outgoing.length === 0 ? null : (
-      <section className="print-block">
-        <h2>المنصرف</h2>
-        {outgoing.length === 0 ? (
-          <p>لا يوجد منصرف في الفترة.</p>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>البيان</th>
-                <th>التصنيف</th>
-                <th>المبلغ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {outgoing.map((row) => (
-                <tr key={row.id}>
-                  <td>{formatDate(row.occurredOn)}</td>
-                  <td>{row.description}</td>
-                  <td>{printTreasuryCategoryLabel(row.category)}</td>
-                  <td>{formatMoney(row.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
-      )}
+              </thead>
+              <tbody>
+                {book.entries.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDate(row.occurredOn)}</td>
+                    <td>{row.description}</td>
+                    <td>{label(row.category)}</td>
+                    <td>{row.direction === 'in' ? formatMoney(row.amount) : ''}</td>
+                    <td>{row.direction === 'out' ? formatMoney(row.amount) : ''}</td>
+                    <td>{formatMoney(row.runningBalance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      ) : null}
+      {showIn ? (
+        <section className="print-block">
+          <h2>الوارد</h2>
+          {incoming.length === 0 ? <p>لا يوجد وارد في الفترة.</p> : rowsTable(incoming)}
+        </section>
+      ) : null}
+      {showOut ? (
+        <section className="print-block">
+          <h2>المنصرف</h2>
+          {outgoing.length === 0 ? <p>لا يوجد منصرف في الفترة.</p> : rowsTable(outgoing)}
+        </section>
+      ) : null}
     </PrintChrome>
   )
 }

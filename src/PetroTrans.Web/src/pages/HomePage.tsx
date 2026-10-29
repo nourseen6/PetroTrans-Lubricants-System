@@ -7,6 +7,7 @@ import { useLocale } from '../i18n/LocaleContext'
 import { EmptyState, ErrorBanner, StatusBadge } from '../ui/Feedback'
 import { formatDate, formatMoney } from '../ui/format'
 import { Icon } from '../ui/Icons'
+import { BackupWarning } from './BackupSection'
 
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException
@@ -86,6 +87,7 @@ export function HomePage({ user, onNavigate }: HomePageProps) {
         </div>
       </div>
       <ErrorBanner error={error} onRetry={() => { setError(null); load() }} />
+      <BackupWarning onOpen={() => onNavigate('/settings')} />
 
       <div className="quick-actions">
         <button type="button" className="primary-btn toolbar-btn icon-btn" onClick={() => onNavigate('/sales')}>

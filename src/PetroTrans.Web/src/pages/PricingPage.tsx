@@ -19,9 +19,10 @@ import { formatDate, formatMoney, parseAmount } from '../ui/format'
 import { Icon } from '../ui/Icons'
 import { groupByCatalogCategory } from '../ui/catalogGroups'
 
-export function PricingPage() {
+export function PricingPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { t } = useLocale()
   const [query, setQuery] = useState('')
+  const [printCustomerId, setPrintCustomerId] = useState('')
   const [rows, setRows] = useState<PricingMatrixRow[]>([])
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [selected, setSelected] = useState<PricingMatrixRow | null>(null)
@@ -52,6 +53,14 @@ export function PricingPage() {
     }, 200)
     return () => window.clearTimeout(handle)
   }, [query])
+
+  async function toggleRow(row: PricingMatrixRow) {
+    if (selected?.variantId === row.variantId) {
+      setSelected(null)
+      return
+    }
+    await openRow(row)
+  }
 
   async function openRow(row: PricingMatrixRow) {
     setSelected(row)
@@ -135,6 +144,126 @@ export function PricingPage() {
     }
   }
 
+  // The editor opens in a row right under the clicked item, so there is no scrolling to the bottom and back.
+  const editor = selected ? (
+    <div className="pricing-inline-editor">
+      <form className="editor panel-card" onSubmit={(event) => void saveBase(event)}>
+        <h2 className="editor-title">
+          {t.pricing.customerList}: {selected.productName} — {selected.packagingType} {selected.packagingSize}
+        </h2>
+        <p className="muted">{t.pricing.customerListHint}</p>
+        <div className="form-grid">
+          <label className="field">
+            <span>{t.pricing.basePrice}</span>
+            <input value={basePrice} onChange={(event) => setBasePrice(event.target.value)} autoFocus />
+          </label>
+          <label className="field">
+            <span>{t.pricing.reason}</span>
+            <input value={reason} onChange={(event) => setReason(event.target.value)} />
+          </label>
+        </div>
+        <button className="primary-btn toolbar-btn" type="submit" disabled={busy}>
+          {t.pricing.saveBase}
+        </button>
+      </form>
+
+      <form className="editor panel-card" onSubmit={(event) => void savePurchase(event)}>
+        <h2 className="editor-title">{t.pricing.companyPrices}</h2>
+        <p className="muted">{t.pricing.companyPriceHint}</p>
+        <div className="form-grid">
+          <label className="field">
+            <span>{t.pricing.companyPrices}</span>
+            <input value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} />
+          </label>
+        </div>
+        <button className="primary-btn toolbar-btn" type="submit" disabled={busy}>
+          {t.pricing.saveCompany}
+        </button>
+      </form>
+
+      <form className="panel-card" onSubmit={(event) => void saveCustomerPrice(event)}>
+        <h2 className="editor-title">{t.pricing.customerPrices}</h2>
+        <p className="muted">{t.pricing.customerPriceHint}</p>
+        <div className="form-grid">
+          <label className="field">
+            <span>{t.sales.customer}</span>
+            <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} required>
+              <option value="">{t.sales.chooseCustomer}</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>{t.pricing.customerPrice}</span>
+            <input value={customerPrice} onChange={(event) => setCustomerPriceValue(event.target.value)} required />
+          </label>
+        </div>
+        <button className="btn-secondary toolbar-btn" type="submit" disabled={busy}>
+          {t.pricing.addCustomerPrice}
+        </button>
+        {specials.length === 0 ? (
+          <p className="muted">{t.ops.emptyReports}</p>
+        ) : (
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>{t.sales.customer}</th>
+                <th>{t.pricing.customerPrice}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {specials.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.customerName}</td>
+                  <td>{formatMoney(row.unitPrice)}</td>
+                  <td>
+                    <button type="button" className="link-btn" onClick={() => setRemoveTarget(row)}>
+                      {t.pricing.remove}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </form>
+
+      <section className="panel-card">
+        <h2 className="editor-title">{t.pricing.history}</h2>
+        {history.length === 0 ? (
+          <EmptyState title={t.ops.emptyReports} />
+        ) : (
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>{t.sales.date}</th>
+                <th>{t.pricing.kind}</th>
+                <th>{t.pricing.oldPrice}</th>
+                <th>{t.pricing.newPrice}</th>
+                <th>{t.pricing.reason}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((row) => (
+                <tr key={row.id}>
+                  <td>{formatDate(row.changedAt)}</td>
+                  <td>{row.changeKind}</td>
+                  <td>{formatMoney(row.oldUnitPrice)}</td>
+                  <td>{formatMoney(row.newUnitPrice)}</td>
+                  <td>{row.reason ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  ) : null
+
   return (
     <section className="page">
       <div className="page-head">
@@ -149,6 +278,19 @@ export function PricingPage() {
           <Icon name="search" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t.pricing.search} />
         </label>
+        <select value={printCustomerId} onChange={(event) => setPrintCustomerId(event.target.value)} title={t.pricing.printFor}>
+          <option value="">{t.pricing.printForAll}</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>{customer.name}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => onNavigate(printCustomerId ? `/print/price-list?customer=${printCustomerId}` : '/print/price-list')}
+        >
+          {t.pricing.printList}
+        </button>
       </div>
       {rows.length === 0 ? (
         <EmptyState title={t.products.empty} />
@@ -170,150 +312,48 @@ export function PricingPage() {
               <tr key={`cat-${group.title}`} className="category-row">
                 <td colSpan={7}>{group.title}</td>
               </tr>,
-              ...group.rows.map((row) => (
-                <tr key={row.variantId} className="clickable" onClick={() => void openRow(row)}>
-                  <td>{row.productName}</td>
-                  <td>{row.brand ?? '—'}</td>
-                  <td>
-                    {row.packagingType} {row.packagingSize}
-                  </td>
-                  <td>{formatMoney(row.basePrice)}</td>
-                  <td>{formatMoney(row.purchasePrice ?? null)}</td>
-                  <td>{row.customerPriceCount}</td>
-                  <td>
-                    <button type="button" className="link-btn" onClick={(event) => { event.stopPropagation(); void openRow(row) }}>
-                      {t.customers.edit}
-                    </button>
-                  </td>
-                </tr>
-              )),
+              ...group.rows.flatMap((row) => {
+                const isOpen = selected?.variantId === row.variantId
+                return [
+                  <tr
+                    key={row.variantId}
+                    className={isOpen ? 'clickable selected-row' : 'clickable'}
+                    onClick={() => void toggleRow(row).catch((err: unknown) => setError(err))}
+                  >
+                    <td>{row.productName}</td>
+                    <td>{row.brand ?? '—'}</td>
+                    <td>
+                      {row.packagingType} {row.packagingSize}
+                    </td>
+                    <td>{formatMoney(row.basePrice)}</td>
+                    <td>{formatMoney(row.purchasePrice ?? null)}</td>
+                    <td>{row.customerPriceCount}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void toggleRow(row).catch((err: unknown) => setError(err))
+                        }}
+                      >
+                        {isOpen ? t.pricing.close : t.customers.edit}
+                      </button>
+                    </td>
+                  </tr>,
+                  ...(isOpen
+                    ? [
+                        <tr key={`${row.variantId}-editor`} className="inline-editor-row">
+                          <td colSpan={7}>{editor}</td>
+                        </tr>,
+                      ]
+                    : []),
+                ]
+              }),
             ])}
           </tbody>
         </table>
       )}
-
-      {selected ? (
-        <form className="editor panel-card" onSubmit={(event) => void saveBase(event)}>
-          <h2 className="editor-title">
-            {t.pricing.customerList}: {selected.productName} — {selected.packagingType} {selected.packagingSize}
-          </h2>
-          <p className="muted">{t.pricing.customerListHint}</p>
-          <div className="form-grid">
-            <label className="field">
-              <span>{t.pricing.basePrice}</span>
-              <input value={basePrice} onChange={(event) => setBasePrice(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>{t.pricing.reason}</span>
-              <input value={reason} onChange={(event) => setReason(event.target.value)} />
-            </label>
-          </div>
-          <button className="primary-btn toolbar-btn" type="submit" disabled={busy}>
-            {t.pricing.saveBase}
-          </button>
-        </form>
-      ) : null}
-
-      {selected ? (
-        <form className="editor panel-card" onSubmit={(event) => void savePurchase(event)}>
-          <h2 className="editor-title">{t.pricing.companyPrices}</h2>
-          <p className="muted">{t.pricing.companyPriceHint}</p>
-          <div className="form-grid">
-            <label className="field">
-              <span>{t.pricing.companyPrices}</span>
-              <input value={purchasePrice} onChange={(event) => setPurchasePrice(event.target.value)} />
-            </label>
-          </div>
-          <button className="primary-btn toolbar-btn" type="submit" disabled={busy}>
-            {t.pricing.saveCompany}
-          </button>
-        </form>
-      ) : null}
-
-      {selected ? (
-        <form className="panel-card" onSubmit={(event) => void saveCustomerPrice(event)}>
-          <h2 className="editor-title">{t.pricing.customerPrices}</h2>
-          <p className="muted">{t.pricing.customerPriceHint}</p>
-          <div className="form-grid">
-            <label className="field">
-              <span>{t.sales.customer}</span>
-              <select value={customerId} onChange={(event) => setCustomerId(event.target.value)} required>
-                <option value="">{t.sales.chooseCustomer}</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>{t.pricing.customerPrice}</span>
-              <input value={customerPrice} onChange={(event) => setCustomerPriceValue(event.target.value)} required />
-            </label>
-          </div>
-          <button className="btn-secondary toolbar-btn" type="submit" disabled={busy}>
-            {t.pricing.addCustomerPrice}
-          </button>
-          {specials.length === 0 ? (
-            <p className="muted">{t.ops.emptyReports}</p>
-          ) : (
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>{t.sales.customer}</th>
-                  <th>{t.pricing.customerPrice}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {specials.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.customerName}</td>
-                    <td>{formatMoney(row.unitPrice)}</td>
-                    <td>
-                      <button type="button" className="link-btn" onClick={() => setRemoveTarget(row)}>
-                        {t.pricing.remove}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </form>
-      ) : null}
-
-      {selected ? (
-        <section className="panel-card">
-          <h2 className="editor-title">{t.pricing.history}</h2>
-          {history.length === 0 ? (
-            <EmptyState title={t.ops.emptyReports} />
-          ) : (
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th>{t.sales.date}</th>
-                  <th>{t.pricing.kind}</th>
-                  <th>{t.pricing.oldPrice}</th>
-                  <th>{t.pricing.newPrice}</th>
-                  <th>{t.pricing.reason}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((row) => (
-                  <tr key={row.id}>
-                    <td>{formatDate(row.changedAt)}</td>
-                    <td>{row.changeKind}</td>
-                    <td>{formatMoney(row.oldUnitPrice)}</td>
-                    <td>{formatMoney(row.newUnitPrice)}</td>
-                    <td>{row.reason ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      ) : null}
 
       {removeTarget ? (
         <ConfirmDialog

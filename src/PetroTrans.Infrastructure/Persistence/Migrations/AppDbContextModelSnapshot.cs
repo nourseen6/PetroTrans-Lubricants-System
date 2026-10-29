@@ -729,11 +729,82 @@ namespace PetroTrans.Infrastructure.Persistence.Migrations
                     b.ToTable("supplier_payments", (string)null);
                 });
 
+            modelBuilder.Entity("PetroTrans.Domain.Finance.TreasuryCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("direction");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_system");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name");
+
+                    b.Property<int>("RowVersion")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("row_version");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_treasury_categories_code");
+
+                    b.ToTable("treasury_categories", (string)null);
+                });
+
             modelBuilder.Entity("PetroTrans.Domain.Finance.TreasuryEntry", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("account");
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 4)
