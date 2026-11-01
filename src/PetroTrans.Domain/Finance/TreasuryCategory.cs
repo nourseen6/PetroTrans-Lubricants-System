@@ -57,6 +57,7 @@ public static class TreasuryCategoryDefaults
         new("employee_advance", "سلفة لموظف", TreasuryDirections.Out, false),
         new(TreasuryCategories.Withdrawal, "مسحوبات شخصية", TreasuryDirections.Out, false),
         new(TreasuryCategories.BankFees, "مصاريف بنكية", TreasuryCategory.BankOnly, true),
+        new(TreasuryCategories.BalanceAdjustment, "تسوية رصيد", TreasuryCategory.BothDirections, true),
         new(TreasuryCategories.Other, "غير ذلك", TreasuryCategory.BothDirections, true),
         // Old "deposit" rows from before Banque Misr existed; hidden from forms, kept for their label.
         new(TreasuryCategories.Deposit, "إيداع بنك (قديم)", TreasuryDirections.In, true, IsActive: false),

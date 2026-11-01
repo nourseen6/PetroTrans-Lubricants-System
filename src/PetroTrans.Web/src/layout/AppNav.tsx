@@ -16,6 +16,7 @@ const iconByRoute = {
   inventory: 'inventory',
   purchasing: 'purchasing',
   treasury: 'payment',
+  analytics: 'reports',
   reports: 'reports',
   assistant: 'assistant',
   settings: 'settings',

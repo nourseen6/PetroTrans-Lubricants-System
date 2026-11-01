@@ -72,6 +72,7 @@ public static class OperationsEndpoints
         app.MapPost("/api/sales-returns/{id:guid}/post", (Delegate)PostReturn).RequireAuthorization($"perm:{PermissionCodes.ReturnsCreate}");
 
         app.MapGet("/api/reports/{type}", (Delegate)Report).RequireAuthorization($"perm:{PermissionCodes.ReportsView}");
+        app.MapGet("/api/analytics", async (DateTime? from, DateTime? to, IAnalyticsService analytics, CancellationToken ct) => Results.Json(await analytics.GetAsync(from, to, ct))).RequireAuthorization($"perm:{PermissionCodes.ReportsView}");
         app.MapGet("/api/customers/{id:guid}/statement", (Delegate)Statement).RequireAuthorization($"perm:{PermissionCodes.ReportsView}");
         app.MapGet("/api/suppliers/{id:guid}/statement", (Delegate)SupplierStatement).RequireAuthorization($"perm:{PermissionCodes.PurchasingView}");
         app.MapGet("/api/treasury", (Delegate)TreasuryBook).RequireAuthorization($"perm:{PermissionCodes.TreasuryView}");
@@ -80,6 +81,7 @@ public static class OperationsEndpoints
         app.MapGet("/api/treasury/categories", (Delegate)TreasuryCategories).RequireAuthorization();
         app.MapPost("/api/treasury/categories", (Delegate)CreateTreasuryCategory).RequireAuthorization($"perm:{PermissionCodes.SettingsManage}");
         app.MapPut("/api/treasury/categories/{id:guid}", (Delegate)UpdateTreasuryCategory).RequireAuthorization($"perm:{PermissionCodes.SettingsManage}");
+        app.MapPut("/api/treasury/{id:guid}/category", async (Guid id, ChangeTreasuryCategoryRequest request, HttpContext http, ITreasuryService treasury, CancellationToken ct) => From(await treasury.ChangeCategoryAsync(id, request.Category, CurrentUser.RequireId(http), ct))).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
         app.MapDelete("/api/treasury/{id:guid}", (Delegate)DeleteTreasury).RequireAuthorization($"perm:{PermissionCodes.TreasuryEdit}");
     }
 
@@ -272,5 +274,6 @@ public static class OperationsEndpoints
     }
 
     private sealed record BackupRequest(string DestinationPath);
+    private sealed record ChangeTreasuryCategoryRequest(string? Category);
     private sealed record RestoreRequest(string SourcePath, bool Confirm);
 }

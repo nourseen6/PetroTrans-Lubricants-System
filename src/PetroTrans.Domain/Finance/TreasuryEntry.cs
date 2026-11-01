@@ -34,6 +34,8 @@ public static class TreasuryCategories
     public const string BankDeposit = "bank_deposit";
     public const string BankWithdrawal = "bank_withdrawal";
     public const string BankFees = "bank_fees";
+    /// <summary>Correcting the cash balance (e.g. the opening balance); neither income nor expense.</summary>
+    public const string BalanceAdjustment = "balance_adjustment";
     public const string SupplierPayment = "supplier_payment";
     public const string Other = "other";
 
@@ -51,6 +53,29 @@ public static class TreasuryCategories
         SupplierPayment,
         Other
     ];
+
+    // Money that leaves the cash box or bank without being a running cost of the business:
+    // goods bought (already counted as cost of goods), moving money between cash and bank,
+    // the owner's personal withdrawals, and advances that come back.
+    private static readonly HashSet<string> NotOperatingExpense = new(StringComparer.OrdinalIgnoreCase)
+    {
+        SupplierPayment,
+        BankDeposit,
+        BankWithdrawal,
+        Deposit,
+        Withdrawal,
+        "employee_advance",
+        BalanceAdjustment,
+        Sales,
+    };
+
+    public static bool IsTransferCategory(string? category)
+        => string.Equals(category, BankDeposit, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, BankWithdrawal, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The one rule for "is this outgoing movement an operating expense", used by every profit figure.</summary>
+    public static bool IsOperatingExpense(string? category)
+        => string.IsNullOrWhiteSpace(category) || !NotOperatingExpense.Contains(category);
 
     public static readonly string[] BankIncoming = [Sales, BankDeposit, Other];
     public static readonly string[] BankOutgoing = [BankWithdrawal, SupplierPayment, Salaries, BankFees, Other];

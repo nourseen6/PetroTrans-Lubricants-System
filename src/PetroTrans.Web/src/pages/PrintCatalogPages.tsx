@@ -8,6 +8,11 @@ import { requestPdf, requestPrint } from '../ui/print'
 // A4 content height at 96 dpi once the @page margins are taken off (297mm - 32mm ≈ 1000px), with a little slack.
 const ONE_PAGE_PX = 960
 
+// Table cells show the number only; the column header carries the currency, which keeps rows on one line.
+function amount(value: number | null | undefined) {
+  return value == null ? '—' : Number(value).toLocaleString('ar-EG', { maximumFractionDigits: 2 })
+}
+
 function CatalogSheet({
   title,
   company,
@@ -83,50 +88,71 @@ export function PrintPriceListPage() {
   if (error) return <p className="banner error">تعذر تحميل قائمة الأسعار.</p>
   if (!rows || !company) return <p className="muted">جاري التحميل…</p>
   let line = 0
+  // Same one-page rule as the stock sheet: long lists split into two columns, then the sheet
+  // shrinks just enough to end on a single page.
+  type Entry = { kind: 'group'; title: string } | { kind: 'item'; no: number; row: PricingMatrixRow }
+  const entries: Entry[] = []
+  for (const group of groupByCatalogCategory(rows, (row) => row.category)) {
+    entries.push({ kind: 'group', title: group.title })
+    for (const row of group.rows) {
+      line += 1
+      entries.push({ kind: 'item', no: line, row })
+    }
+  }
+  const twoColumns = rows.length > 30
+  const half = Math.ceil(entries.length / 2)
+  const columns = twoColumns ? [entries.slice(0, half), entries.slice(half)] : [entries]
+
+  function table(part: Entry[], withTotal: boolean, key: number) {
+    return (
+      <table key={key} className="price-table">
+        <thead>
+          <tr>
+            <th className="col-name">الصنف</th>
+            <th className="col-pack">العبوة</th>
+            <th className="col-num">السعر (ج.م)</th>
+            <th className="col-blank">الكمية</th>
+            <th className="col-blank">الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {part.map((entry) =>
+            entry.kind === 'group' ? (
+              <tr key={`g-${entry.title}`} className="print-group-row">
+                <td colSpan={5}>{entry.title}</td>
+              </tr>
+            ) : (
+              <tr key={entry.row.variantId}>
+                <td>{entry.row.productName}{entry.row.brand ? ` — ${entry.row.brand}` : ''}</td>
+                <td>{entry.row.packagingType} {entry.row.packagingSize}</td>
+                <td>{amount(special.get(entry.row.variantId) ?? entry.row.basePrice)}</td>
+                <td className="col-blank" />
+                <td className="col-blank" />
+              </tr>
+            ),
+          )}
+          {withTotal ? (
+            <tr className="print-total-row">
+              <td colSpan={4}>الإجمالي</td>
+              <td className="col-blank" />
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    )
+  }
+
   return (
-    <CatalogSheet title="قائمة أسعار / طلبية" company={company}>
+    <CatalogSheet title="قائمة أسعار / طلبية" company={company} fitKey={rows.length}>
       <p className="print-date-note">أسعار يوم {formatDate(todayIso())}</p>
       <div className="print-fill-lines">
         <span>العميل: {customerName}</span>
         <span>التاريخ:</span>
         <span>المندوب:</span>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th className="col-no">م</th>
-            <th>الصنف</th>
-            <th>العبوة</th>
-            <th>السعر</th>
-            <th className="col-blank">الكمية</th>
-            <th className="col-blank">الإجمالي</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groupByCatalogCategory(rows, (row) => row.category).flatMap((group) => [
-            <tr key={`g-${group.title}`} className="print-group-row">
-              <td colSpan={6}>{group.title}</td>
-            </tr>,
-            ...group.rows.map((row) => {
-              line += 1
-              return (
-                <tr key={row.variantId}>
-                  <td className="col-no">{line}</td>
-                  <td>{row.productName}{row.brand ? ` — ${row.brand}` : ''}</td>
-                  <td>{row.packagingType} {row.packagingSize}</td>
-                  <td>{formatMoney(special.get(row.variantId) ?? row.basePrice)}</td>
-                  <td className="col-blank" />
-                  <td className="col-blank" />
-                </tr>
-              )
-            }),
-          ])}
-          <tr className="print-total-row">
-            <td colSpan={5}>الإجمالي</td>
-            <td className="col-blank" />
-          </tr>
-        </tbody>
-      </table>
+      <div className={twoColumns ? 'print-two-columns' : undefined}>
+        {columns.map((part, index) => table(part, index === columns.length - 1, index))}
+      </div>
       <div className="print-fill-lines print-signatures">
         <span>توقيع العميل:</span>
         <span>توقيع المندوب:</span>
@@ -222,11 +248,11 @@ export function PrintStockPage() {
         <thead>
           <tr>
             <th className="col-no">م</th>
-            <th>الصنف</th>
-            <th>العبوة</th>
-            <th>الكمية</th>
-            {showCost ? <th>سعر الشركة</th> : null}
-            {hasValue ? <th>القيمة</th> : null}
+            <th className="col-name">الصنف</th>
+            <th className="col-pack">العبوة</th>
+            <th className="col-num">الكمية</th>
+            {showCost ? <th className="col-num">سعر الشركة (ج.م)</th> : null}
+            {hasValue ? <th className="col-num">القيمة (ج.م)</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -241,8 +267,8 @@ export function PrintStockPage() {
                 <td>{entry.row.productName}</td>
                 <td>{entry.row.pack}</td>
                 <td>{entry.row.onHand.toLocaleString('ar-EG')}</td>
-                {showCost ? <td>{entry.row.cost == null ? '—' : formatMoney(entry.row.cost)}</td> : null}
-                {hasValue ? <td>{entry.row.value == null ? '—' : formatMoney(entry.row.value)}</td> : null}
+                {showCost ? <td>{entry.row.cost == null ? '—' : amount(entry.row.cost)}</td> : null}
+                {hasValue ? <td>{entry.row.value == null ? '—' : amount(entry.row.value)}</td> : null}
               </tr>
             ),
           )}
@@ -251,7 +277,7 @@ export function PrintStockPage() {
               <td colSpan={3}>الإجمالي</td>
               <td>{totalQty.toLocaleString('ar-EG')}</td>
               {showCost ? <td /> : null}
-              {hasValue ? <td>{formatMoney(totalValue)}</td> : null}
+              {hasValue ? <td>{amount(totalValue)}</td> : null}
             </tr>
           ) : null}
         </tbody>

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Windows;
+using System.Windows.Media;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
@@ -34,10 +35,21 @@ public partial class MainWindow : Window
         WindowState = WindowState.Normal;
     }
 
-    // The page is drawn at 100%: WebView2 already follows the Windows display scaling, and the
-    // screens rearrange themselves for the window size. Shrinking the page to fit a fixed design
-    // size made text tiny on scaled laptops and different on every machine. Ctrl + mouse wheel
-    // still lets the user enlarge or shrink everything.
+    // WebView2 already follows the Windows display scaling, which on a 150% laptop makes the app's
+    // large type feel oversized. Easing it back by the square root of that scaling keeps the size
+    // people were used to (150% -> 82%, 125% -> 89%, 100% -> unchanged) without the old fit-to-1366
+    // formula that made text tiny on small scaled screens. The screens still rearrange themselves
+    // for the window size, and Ctrl + mouse wheel still enlarges or shrinks everything.
+    private void ApplyDefaultZoom()
+    {
+        if (WebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var scale = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        WebView.ZoomFactor = scale > 1.01 ? Math.Round(1 / Math.Sqrt(scale), 3) : 1.0;
+    }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -59,6 +71,8 @@ public partial class MainWindow : Window
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             await WebView.EnsureCoreWebView2Async(env);
             ConfigureWebView();
+            ApplyDefaultZoom();
+            DpiChanged += (_, _) => ApplyDefaultZoom();
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             WebView.CoreWebView2.Navigate(url);

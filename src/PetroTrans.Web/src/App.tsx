@@ -13,6 +13,7 @@ import { CustomerFilePage } from './pages/CustomerFilePage'
 import { PrintInvoicePage } from './pages/PrintInvoicePage'
 import { PrintPaymentPage, PrintStatementPage, PrintSupplierStatementPage, PrintTreasuryPage, PrintReportPage, PrintReceiptPage, PrintBillPage } from './pages/PrintDocumentsPage'
 import { PrintPriceListPage, PrintStockPage } from './pages/PrintCatalogPages'
+import { AnalyticsPage } from './pages/AnalyticsPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { PricingPage } from './pages/PricingPage'
 import { PurchasingPage } from './pages/PurchasingPage'
@@ -150,6 +151,8 @@ export default function App() {
       <PurchasingPage onNavigate={navigate} />
     ) : route === 'treasury' ? (
       <TreasuryPage onNavigate={navigate} />
+    ) : route === 'analytics' ? (
+      <AnalyticsPage />
     ) : route === 'reports' ? (
       <ReportsPage onNavigate={navigate} />
     ) : route === 'assistant' && user ? (

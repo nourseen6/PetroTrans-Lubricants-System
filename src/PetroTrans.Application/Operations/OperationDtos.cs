@@ -340,6 +340,7 @@ public sealed record SaveTreasuryCategoryRequest(string Name, string? Direction,
 public interface ITreasuryService
 {
     Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryEntryDto>> ChangeCategoryAsync(Guid id, string? category, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<TreasuryCategoryDto>> CreateCategoryAsync(SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<TreasuryCategoryDto>> UpdateCategoryAsync(Guid id, SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default, string? account = null);

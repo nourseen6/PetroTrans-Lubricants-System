@@ -601,23 +601,16 @@ public sealed class ReportService : IReportService
         var gross = decimal.Round(salesTotal - cogs, 2, MidpointRounding.AwayFromZero);
         var margin = salesTotal == 0 ? 0m : decimal.Round(gross / salesTotal * 100m, 1, MidpointRounding.AwayFromZero);
 
+        // Every operating expense item counts, including ones the owner added in Settings,
+        // from the cash box and from the bank (bank fees).
         var treasury = await _db.TreasuryEntries.AsNoTracking().ToListAsync(cancellationToken);
         IEnumerable<TreasuryEntry> expenseRows = treasury.Where(x => x.Direction == TreasuryDirections.Out);
         if (filters.From is { } expFrom) expenseRows = expenseRows.Where(x => x.OccurredOn.Date >= expFrom.Date);
         if (filters.To is { } expTo) expenseRows = expenseRows.Where(x => x.OccurredOn.Date <= expTo.Date);
-        var operatingCats = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            TreasuryCategories.Salaries,
-            TreasuryCategories.Rent,
-            TreasuryCategories.OfficeExpense,
-            TreasuryCategories.OfficePurchases,
-            TreasuryCategories.WarehouseExpense,
-            TreasuryCategories.CarExpense,
-            TreasuryCategories.Other
-        };
+        var itemNames = await _db.TreasuryCategories.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.Name, cancellationToken);
         var expenses = expenseRows
-            .Where(x => x.Category is not null && operatingCats.Contains(x.Category))
-            .GroupBy(x => x.Category!)
+            .Where(x => TreasuryCategories.IsOperatingExpense(x.Category))
+            .GroupBy(x => x.Category ?? TreasuryCategories.Other)
             .Select(g => new { Category = g.Key, Amount = g.Sum(x => x.Amount) })
             .OrderByDescending(x => x.Amount)
             .ToList();
@@ -687,7 +680,7 @@ public sealed class ReportService : IReportService
         var expenseSection = new ReportDto(
             "مصروفات التشغيل",
             ["التصنيف", "المبلغ"],
-            expenses.Select(x => (IReadOnlyList<string?>)[ExpenseLabel(x.Category), decimal.Round(x.Amount, 2, MidpointRounding.AwayFromZero).ToString()]).ToList());
+            expenses.Select(x => (IReadOnlyList<string?>)[itemNames.GetValueOrDefault(x.Category) ?? ExpenseLabel(x.Category), decimal.Round(x.Amount, 2, MidpointRounding.AwayFromZero).ToString()]).ToList());
 
         return new ReportDto(
             "مكسب الشركة",

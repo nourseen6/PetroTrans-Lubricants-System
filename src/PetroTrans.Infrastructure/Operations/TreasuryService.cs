@@ -282,6 +282,48 @@ public sealed class TreasuryService : ITreasuryService
         return OperationResult<bool>.Ok(true);
     }
 
+    /// <summary>
+    /// Moves a movement to another item (e.g. a balance adjustment saved as salaries by mistake).
+    /// Only the item changes; date, amount and description stay, and the change is audited.
+    /// </summary>
+    public async Task<OperationResult<TreasuryEntryDto>> ChangeCategoryAsync(Guid id, string? category, Guid actorUserId, CancellationToken cancellationToken = default)
+    {
+        var entry = await _db.TreasuryEntries.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entry is null)
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("حركة الخزينة غير موجودة.", 404);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.SourceDocumentType))
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("الحركة دي مربوطة بتحصيل أو سداد أو إيداع بنك، فبندها ثابت.");
+        }
+
+        var next = TreasuryCategories.Canonical(category);
+        if (string.IsNullOrWhiteSpace(next))
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("اختار البند.");
+        }
+
+        if (TreasuryCategories.IsTransferCategory(next))
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("الإيداع والسحب من البنك بيتسجلوا كحركة جديدة، مش بتغيير البند.");
+        }
+
+        if (!await IsCategoryAllowedAsync(entry.Direction, next, entry.Account, cancellationToken))
+        {
+            return OperationResult<TreasuryEntryDto>.Fail("البند ده مش مناسب للحركة دي (وارد/منصرف).");
+        }
+
+        var before = entry.Category;
+        entry.Category = next;
+        entry.UpdatedByUserId = actorUserId;
+        _db.AuditLogs.Add(Audits.Create(actorUserId, "treasury.category.change", "treasury_entry", entry.Id, new { Category = before }, new { Category = next }));
+        await _db.SaveChangesAsync(cancellationToken);
+        var book = await GetBookAsync(cancellationToken: cancellationToken, account: entry.Account);
+        return OperationResult<TreasuryEntryDto>.Ok(book.Entries.First(x => x.Id == entry.Id));
+    }
+
     public async Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default)
         => await _db.TreasuryCategories.AsNoTracking()
             .OrderBy(x => x.SortOrder)
