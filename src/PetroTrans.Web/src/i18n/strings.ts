@@ -374,6 +374,7 @@ export const strings = {
       version: 'الإصدار',
     },
     ops: {
+      allCustomersToo: 'اعرض كل العملاء (حتى اللي رصيدهم صفر)',
       printStock: 'طباعة المخزن',
       printStockFor: 'أنهي مخزن',
       allWarehouses: 'كل المخازن',
@@ -905,6 +906,7 @@ export const strings = {
       version: 'Version',
     },
     ops: {
+      allCustomersToo: 'Show every customer (even zero balance)',
       printStock: 'Print stock',
       printStockFor: 'Which warehouse',
       allWarehouses: 'All warehouses',

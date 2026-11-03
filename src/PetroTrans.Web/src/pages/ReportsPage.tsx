@@ -27,6 +27,7 @@ export function ReportsPage({ onNavigate }: { onNavigate: (path: string) => void
   const [to, setTo] = useState('')
   const [customerId, setCustomerId] = useState('')
   const [variantId, setVariantId] = useState('')
+  const [allCustomers, setAllCustomers] = useState(false)
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [variants, setVariants] = useState<VariantPick[]>([])
   const [report, setReport] = useState<Report | null>(null)
@@ -48,6 +49,7 @@ export function ReportsPage({ onNavigate }: { onNavigate: (path: string) => void
       if (to) params.to = to
       if (customerId) params.customerId = customerId
       if (variantId) params.variantId = variantId
+      if (allCustomers) params.allCustomers = 'true'
       setReport(await fetchReport(type, params))
       setStatement(customerId ? await fetchStatement(customerId) : null)
     } catch (err) {
@@ -85,6 +87,12 @@ export function ReportsPage({ onNavigate }: { onNavigate: (path: string) => void
             </option>
           ))}
         </select>
+        {type === 'customer-balances' ? (
+          <label className="check-field">
+            <input type="checkbox" checked={allCustomers} onChange={(event) => setAllCustomers(event.target.checked)} />
+            <span>{t.ops.allCustomersToo}</span>
+          </label>
+        ) : null}
         <button className="primary-btn toolbar-btn" type="submit">{t.ops.reports}</button>
         <button
           className="btn-secondary toolbar-btn icon-btn"
@@ -96,6 +104,7 @@ export function ReportsPage({ onNavigate }: { onNavigate: (path: string) => void
             if (to) params.set('to', to)
             if (customerId) params.set('customerId', customerId)
             if (variantId) params.set('variantId', variantId)
+            if (allCustomers) params.set('allCustomers', 'true')
             onNavigate(`/print/report?${params}`)
           }}
         >

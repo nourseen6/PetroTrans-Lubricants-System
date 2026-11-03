@@ -201,9 +201,9 @@ public static class OperationsEndpoints
     private static async Task<IResult> PostReturn(Guid id, HttpContext http, ISalesReturnService returns, CancellationToken ct)
         => From(await returns.PostAsync(id, CurrentUser.RequireId(http), ct));
 
-    private static async Task<IResult> Report(string type, DateTime? from, DateTime? to, Guid? customerId, Guid? supplierId, Guid? variantId, Guid? warehouseId, IReportService reports, CancellationToken ct)
+    private static async Task<IResult> Report(string type, DateTime? from, DateTime? to, Guid? customerId, Guid? supplierId, Guid? variantId, Guid? warehouseId, bool? allCustomers, IReportService reports, CancellationToken ct)
     {
-        var filters = new ReportFilters(from, to, customerId, supplierId, variantId, warehouseId);
+        var filters = new ReportFilters(from, to, customerId, supplierId, variantId, warehouseId, allCustomers == true);
         var result = type switch
         {
             "sales" => await reports.SalesAsync(filters, ct),

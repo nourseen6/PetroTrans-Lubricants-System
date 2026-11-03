@@ -137,6 +137,7 @@ export function PrintReportPage() {
   const to = params.get('to') ?? ''
   const customerId = params.get('customerId') ?? ''
   const variantId = params.get('variantId') ?? ''
+  const allCustomers = params.get('allCustomers') === 'true'
   const [report, setReport] = useState<Report | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -146,6 +147,7 @@ export function PrintReportPage() {
     if (to) filters.to = to
     if (customerId) filters.customerId = customerId
     if (variantId) filters.variantId = variantId
+    if (allCustomers) filters.allCustomers = 'true'
     void Promise.all([fetchReport(type, filters), fetchCompany()])
       .then(([next, nextCompany]) => {
         setReport(next)

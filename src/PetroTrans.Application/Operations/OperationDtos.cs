@@ -122,7 +122,7 @@ public sealed record ReturnableInvoiceDto(
 
 public sealed record AuditRowDto(Guid Id, DateTime OccurredAt, string? UserName, string Action, string? EntityType, Guid? EntityId, string? BeforeJson, string? AfterJson);
 
-public sealed record ReportFilters(DateTime? From, DateTime? To, Guid? CustomerId, Guid? SupplierId, Guid? VariantId, Guid? WarehouseId);
+public sealed record ReportFilters(DateTime? From, DateTime? To, Guid? CustomerId, Guid? SupplierId, Guid? VariantId, Guid? WarehouseId, bool AllCustomers = false);
 public sealed record ReportKpiDto(string Label, string Value, string? Hint = null);
 public sealed record ReportDto(
     string Title,

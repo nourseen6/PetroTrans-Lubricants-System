@@ -15,6 +15,33 @@ public class CoreWorkflowTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public async Task CustomerBalances_ListsOnlyNonZeroBalances_UnlessAllCustomersAsked()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        var invoice = await api.CreateInvoiceAsync(api.CustomerId, api.WarehouseId, api.VariantId, 1, 10m);
+        Assert.Equal(HttpStatusCode.OK, (await api.PostInvoiceAsync(invoice.Id)).Status);
+        var settled = await api.Client.PostAsJsonAsync("/api/customers", new
+        {
+            name = "عميل رصيده صفر",
+            customerTypeId = (Guid?)null,
+            contactPerson = "",
+            phone = "",
+            whatsApp = "",
+            address = ""
+        });
+        Assert.Equal(HttpStatusCode.Created, settled.StatusCode);
+
+        var withBalance = await api.Client.GetFromJsonAsync<ReportResponse>("/api/reports/customer-balances", Json);
+        var everyone = await api.Client.GetFromJsonAsync<ReportResponse>("/api/reports/customer-balances?allCustomers=true", Json);
+
+        var customerRows = withBalance!.Rows.Where(row => row[1] != "الإجمالي").ToList();
+        Assert.Equal(10m, decimal.Parse(Assert.Single(customerRows)[3]!, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.DoesNotContain(withBalance.Rows, row => row[1] == "عميل رصيده صفر");
+        Assert.Contains(everyone!.Rows, row => row[1] == "عميل رصيده صفر");
+    }
+
+    [Fact]
     public async Task WrongItem_CanBeChangedToBalanceAdjustment_AndThenStopsCountingAsExpense()
     {
         await using var host = await TestHost.StartAsync();
