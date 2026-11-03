@@ -1598,3 +1598,438 @@ a {
   gap: 10px;
   align-items: start;
 }
+
+.print-section-total {
+  margin: 18px 0 6px;
+  font-weight: 900;
+}
+
+/* In two columns the blank columns are narrower but still leave room to write. */
+.print-two-columns .col-blank {
+  width: 60px;
+}
+
+/* Compact tables: numbers and packs stay on one line, and the product name takes the room left,
+   so each product fits on a single line even in the two-column layout. */
+.print-sheet.print-compact .col-no,
+.print-sheet.print-compact .col-pack,
+.print-sheet.print-compact .col-num {
+  white-space: nowrap;
+}
+
+.print-sheet.print-compact td:nth-child(2) {
+  white-space: normal;
+  text-align: start;
+}
+
+.print-two-columns .print-sheet .col-blank,
+.print-sheet .print-two-columns .col-blank {
+  width: 48px;
+}
+
+.print-sheet.print-compact th {
+  white-space: normal;
+}
+
+.print-sheet.print-compact .col-blank {
+  width: 70px;
+  white-space: normal;
+}
+
+.print-sheet.print-compact .print-two-columns .col-blank {
+  width: 44px;
+}
+
+/* Fixed shares (the first row decides): the product name gets whatever is left, about a third. */
+.print-sheet.print-compact table {
+  table-layout: fixed;
+}
+
+.print-sheet.print-compact th.col-no {
+  width: 7%;
+}
+
+.print-sheet.print-compact th.col-pack {
+  width: 23%;
+}
+
+.print-sheet.print-compact th.col-num {
+  width: 14%;
+}
+
+.print-sheet.print-compact th.col-blank {
+  width: 12%;
+}
+
+.print-sheet.print-compact th.col-pack {
+  width: 25%;
+}
+
+.print-sheet.print-compact th.col-num {
+  width: 12%;
+}
+
+.print-sheet.print-compact th.col-blank {
+  width: 10%;
+}
+
+/* The price list has two blank columns to write in, so its shares differ from the stock sheet. */
+.print-sheet.print-compact .price-table th.col-no {
+  width: 6%;
+}
+
+.print-sheet.print-compact .price-table th.col-pack {
+  width: 22%;
+}
+
+.print-sheet.print-compact .price-table th.col-num {
+  width: 14%;
+}
+
+.print-sheet.print-compact .price-table th.col-blank {
+  width: 9%;
+}
+
+.print-sheet.print-compact .price-table th.col-no {
+  width: 7%;
+}
+
+.print-sheet.print-compact .price-table th.col-pack {
+  width: 22%;
+}
+
+.print-sheet.print-compact .price-table th.col-num {
+  width: 13%;
+}
+
+/* Wide enough to write a quantity and a total by hand. */
+.print-sheet.print-compact .price-table th.col-blank {
+  width: 13%;
+}
+
+.print-sheet.print-compact .price-table td:nth-child(3) {
+  white-space: normal;
+}
+
+/* Price list has no row-number column: name first (may wrap), pack on one line. */
+.print-sheet.print-compact .price-table td:nth-child(1) {
+  white-space: normal;
+  text-align: start;
+}
+
+.print-sheet.print-compact .price-table td:nth-child(2) {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.print-sheet.print-compact .price-table th.col-pack {
+  width: 24%;
+}
+
+.print-sheet.print-compact .price-table th.col-num {
+  width: 14%;
+}
+
+.print-sheet.print-compact .price-table th.col-blank {
+  width: 15%;
+}
+
+.print-sheet.print-compact .price-table th.col-pack {
+  width: 26%;
+}
+
+.print-sheet.print-compact .price-table th.col-blank {
+  width: 14%;
+}
+
+/* Analysis page. Chart colours: blue = profit / sales, red = loss, orange = spending.
+   Every bar also has written values or a legend, so meaning never rests on colour alone. */
+.analytics {
+  --chart-up: #2a78d6;
+  --chart-down: #e34948;
+  --chart-spend: #eb6834;
+}
+
+:root[data-theme='dark'] .analytics {
+  --chart-up: #3987e5;
+  --chart-down: #e66767;
+  --chart-spend: #d95926;
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.segment {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.segment.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--radius);
+  border: 2px solid;
+  margin-bottom: 14px;
+  background: var(--surface);
+}
+
+.verdict strong {
+  display: block;
+  font-size: 24px;
+}
+
+.verdict span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.verdict-icon {
+  font-size: 30px;
+}
+
+.verdict-up {
+  border-color: var(--chart-up);
+}
+
+.verdict-up .verdict-icon,
+.verdict-up strong {
+  color: var(--chart-up);
+}
+
+.verdict-down {
+  border-color: var(--chart-down);
+}
+
+.verdict-down .verdict-icon,
+.verdict-down strong {
+  color: var(--chart-down);
+}
+
+.kpi-card.kpi-up {
+  border-top: 4px solid var(--chart-up);
+}
+
+.kpi-card.kpi-down {
+  border-top: 4px solid var(--chart-down);
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 0 16px;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart-axis {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.chart-hit {
+  fill: transparent;
+}
+
+.chart-hit:hover {
+  fill: var(--surface-2);
+}
+
+.chart-tick {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chart-value {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.bar-up,
+.bar-sales {
+  fill: var(--chart-up);
+}
+
+.bar-down {
+  fill: var(--chart-down);
+}
+
+.bar-spend {
+  fill: var(--chart-spend);
+}
+
+.chart-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.swatch-up,
+.swatch-sales {
+  background: var(--chart-up);
+}
+
+.swatch-down {
+  background: var(--chart-down);
+}
+
+.swatch-spend {
+  background: var(--chart-spend);
+}
+
+.insight-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.chip-up {
+  border-color: var(--chart-up);
+  color: var(--chart-up);
+}
+
+.chip-down {
+  border-color: var(--chart-down);
+  color: var(--chart-down);
+}
+
+.hbars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.hbars li {
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.hbar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.hbar-track {
+  height: 14px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.hbar-sales,
+.hbar-up {
+  background: var(--chart-up);
+}
+
+.hbar-spend {
+  background: var(--chart-spend);
+}
+
+.hbar-value {
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plain-list {
+  margin: 0;
+  padding: 0 18px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.analytics-note {
+  font-size: 14px;
+}
+
+/* Four blocks per section: always two by two (one column on narrow windows), never three plus one. */
+.analytics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hbars li {
+  grid-template-columns: minmax(0, 44%) minmax(0, 1fr) auto;
+}
+
+.hbar-label {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.data-table select.inline-select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  max-width: 100%;
+}
+
+.check-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}

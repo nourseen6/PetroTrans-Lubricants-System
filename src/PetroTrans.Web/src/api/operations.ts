@@ -399,6 +399,9 @@ export const createTreasuryCategory = (name: string, direction: 'in' | 'out') =>
 export const updateTreasuryCategory = (id: string, name: string, isActive: boolean) =>
   api<TreasuryCategory>(`/api/treasury/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name, isActive }) })
 
+export const changeTreasuryCategory = (id: string, category: string) =>
+  api<TreasuryEntry>(`/api/treasury/${id}/category`, { method: 'PUT', body: JSON.stringify({ category }) })
+
 export const createBankTransfer = (body: {
   occurredOn: string
   direction: 'to_bank' | 'from_bank'

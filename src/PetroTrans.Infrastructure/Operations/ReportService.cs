@@ -178,13 +178,24 @@ public sealed class ReportService : IReportService
     public async Task<ReportDto> CustomerBalancesAsync(ReportFilters filters, CancellationToken cancellationToken = default)
     {
         var customers = await _db.Customers.AsNoTracking().OrderBy(x => x.Name).ToListAsync(cancellationToken);
-        var rows = new List<IReadOnlyList<string?>>();
-        decimal owesTotal = 0m;
-        decimal creditTotal = 0m;
+        var balances = new List<(Domain.Parties.Customer Customer, decimal Outstanding)>();
         foreach (var customer in customers)
         {
             if (filters.CustomerId is { } id && customer.Id != id) continue;
-            var outstanding = await _ledger.GetOutstandingAsync(PartyKinds.Customer, customer.Id, cancellationToken);
+            balances.Add((customer, await _ledger.GetOutstandingAsync(PartyKinds.Customer, customer.Id, cancellationToken)));
+        }
+
+        // By default only customers whose balance is not zero (they owe us, or we owe them),
+        // largest amount first; "all customers" keeps the full alphabetical list.
+        var listed = filters.AllCustomers || filters.CustomerId is not null
+            ? balances
+            : balances.Where(x => x.Outstanding != 0m).OrderByDescending(x => Math.Abs(x.Outstanding)).ToList();
+
+        var rows = new List<IReadOnlyList<string?>>();
+        decimal owesTotal = 0m;
+        decimal creditTotal = 0m;
+        foreach (var (customer, outstanding) in listed)
+        {
             var owes = outstanding > 0 ? outstanding : 0m;
             var credit = outstanding < 0 ? -outstanding : 0m;
             owesTotal += owes;
@@ -207,9 +218,12 @@ public sealed class ReportService : IReportService
             [
                 new ReportKpiDto("إجمالي عليه", owesTotal.ToString("0.##")),
                 new ReportKpiDto("إجمالي له", creditTotal.ToString("0.##")),
-                new ReportKpiDto("صافي المستحق لنا", (owesTotal - creditTotal).ToString("0.##"))
+                new ReportKpiDto("صافي المستحق لنا", (owesTotal - creditTotal).ToString("0.##")),
+                new ReportKpiDto("عدد العملاء في الكشف", listed.Count.ToString(), $"من {balances.Count} عميل")
             ],
-            "عليه = العميل مدين لنا. له = رصيد لصالح العميل (دفع زيادة أو مرتجع).");
+            listed.Count == balances.Count
+                ? "عليه = العميل مدين لنا. له = رصيد لصالح العميل (دفع زيادة أو مرتجع)."
+                : "الكشف فيه العملاء اللي رصيدهم مش صفر بس، من الأكبر للأصغر. عليه = العميل مدين لنا. له = رصيد لصالح العميل (دفع زيادة أو مرتجع).");
     }
 
     public async Task<CustomerStatementDto?> CustomerStatementAsync(Guid customerId, DateTime? from = null, DateTime? to = null, CancellationToken cancellationToken = default)
@@ -601,23 +615,16 @@ public sealed class ReportService : IReportService
         var gross = decimal.Round(salesTotal - cogs, 2, MidpointRounding.AwayFromZero);
         var margin = salesTotal == 0 ? 0m : decimal.Round(gross / salesTotal * 100m, 1, MidpointRounding.AwayFromZero);
 
+        // Every operating expense item counts, including ones the owner added in Settings,
+        // from the cash box and from the bank (bank fees).
         var treasury = await _db.TreasuryEntries.AsNoTracking().ToListAsync(cancellationToken);
         IEnumerable<TreasuryEntry> expenseRows = treasury.Where(x => x.Direction == TreasuryDirections.Out);
         if (filters.From is { } expFrom) expenseRows = expenseRows.Where(x => x.OccurredOn.Date >= expFrom.Date);
         if (filters.To is { } expTo) expenseRows = expenseRows.Where(x => x.OccurredOn.Date <= expTo.Date);
-        var operatingCats = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            TreasuryCategories.Salaries,
-            TreasuryCategories.Rent,
-            TreasuryCategories.OfficeExpense,
-            TreasuryCategories.OfficePurchases,
-            TreasuryCategories.WarehouseExpense,
-            TreasuryCategories.CarExpense,
-            TreasuryCategories.Other
-        };
+        var itemNames = await _db.TreasuryCategories.AsNoTracking().ToDictionaryAsync(x => x.Code, x => x.Name, cancellationToken);
         var expenses = expenseRows
-            .Where(x => x.Category is not null && operatingCats.Contains(x.Category))
-            .GroupBy(x => x.Category!)
+            .Where(x => TreasuryCategories.IsOperatingExpense(x.Category))
+            .GroupBy(x => x.Category ?? TreasuryCategories.Other)
             .Select(g => new { Category = g.Key, Amount = g.Sum(x => x.Amount) })
             .OrderByDescending(x => x.Amount)
             .ToList();
@@ -687,7 +694,7 @@ public sealed class ReportService : IReportService
         var expenseSection = new ReportDto(
             "مصروفات التشغيل",
             ["التصنيف", "المبلغ"],
-            expenses.Select(x => (IReadOnlyList<string?>)[ExpenseLabel(x.Category), decimal.Round(x.Amount, 2, MidpointRounding.AwayFromZero).ToString()]).ToList());
+            expenses.Select(x => (IReadOnlyList<string?>)[itemNames.GetValueOrDefault(x.Category) ?? ExpenseLabel(x.Category), decimal.Round(x.Amount, 2, MidpointRounding.AwayFromZero).ToString()]).ToList());
 
         return new ReportDto(
             "مكسب الشركة",

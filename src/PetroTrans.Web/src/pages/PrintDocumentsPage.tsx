@@ -3,6 +3,7 @@ import { fetchCompany, fetchPayment, fetchStatement, fetchSupplierStatement, fet
 import { displayKpiValue, displayReportCell, formatDate, formatMoney } from '../ui/format'
 import { requestPdf, requestPrint } from '../ui/print'
 import { treasuryCategoryLabel, useTreasuryCategories } from '../ui/treasuryCategories'
+import { summarizeByItem } from '../ui/treasurySummary'
 
 function PrintChrome({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -136,6 +137,7 @@ export function PrintReportPage() {
   const to = params.get('to') ?? ''
   const customerId = params.get('customerId') ?? ''
   const variantId = params.get('variantId') ?? ''
+  const allCustomers = params.get('allCustomers') === 'true'
   const [report, setReport] = useState<Report | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -145,6 +147,7 @@ export function PrintReportPage() {
     if (to) filters.to = to
     if (customerId) filters.customerId = customerId
     if (variantId) filters.variantId = variantId
+    if (allCustomers) filters.allCustomers = 'true'
     void Promise.all([fetchReport(type, filters), fetchCompany()])
       .then(([next, nextCompany]) => {
         setReport(next)
@@ -407,7 +410,7 @@ export function PrintSupplierStatementPage({ supplierId }: { supplierId: string 
   )
 }
 
-export function PrintTreasuryPage() {
+function PrintTreasuryBook() {
   const items = useTreasuryCategories()
   const label = (code: string | null) => items.names.get(code ?? '') ?? printTreasuryCategoryLabel(code)
   const params = new URLSearchParams(window.location.search)
@@ -417,14 +420,21 @@ export function PrintTreasuryPage() {
   const sectionParam = params.get('section')
   const section = sectionParam === 'in' || sectionParam === 'out' || sectionParam === 'bank' ? sectionParam : null
   const [book, setBook] = useState<TreasuryBook | null>(null)
+  const [bankBook, setBankBook] = useState<TreasuryBook | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [error, setError] = useState<unknown>(null)
   useEffect(() => {
     const account = section === 'bank' ? 'bank' : 'cash'
-    void Promise.all([fetchTreasury(from, to, section === 'bank' ? undefined : category, account), fetchCompany()])
-      .then(([next, nextCompany]) => {
+    // "All" prints Banque Misr too, like the screen shows it; a single-item report does not.
+    void Promise.all([
+      fetchTreasury(from, to, category, account),
+      fetchCompany(),
+      section === null && !category ? fetchTreasury(from, to, undefined, 'bank') : Promise.resolve(null),
+    ])
+      .then(([next, nextCompany, bank]) => {
         setBook(next)
         setCompany(nextCompany)
+        setBankBook(bank)
       })
       .catch((err: unknown) => setError(err))
   }, [from, to, category, section])
@@ -446,14 +456,14 @@ export function PrintTreasuryPage() {
         ? 'كشف المنصرف'
         : filtered ? `تقرير ${categoryName}` : 'كشف الخزينة'
   const subtitle = section === 'bank'
-    ? 'كشف حساب بنك مصر'
+    ? filtered ? `بنك مصر — ${categoryName}` : 'كشف حساب بنك مصر'
     : filtered
       ? `${section === 'in' ? 'الوارد' : section === 'out' ? 'المنصرف' : 'تقرير البند'} — ${categoryName}`
       : section === 'in'
         ? 'كشف الخزينة — الوارد'
         : section === 'out'
           ? 'كشف الخزينة — المنصرف'
-          : 'كشف الخزينة — الوارد والمنصرف'
+          : 'كشف الخزينة — الوارد والمنصرف وبنك مصر'
 
   function rowsTable(rows: TreasuryBook['entries']) {
     return (
@@ -506,9 +516,33 @@ export function PrintTreasuryPage() {
           <p>إجمالي البند: {formatMoney(book.categoryTotal ?? 0)}</p>
         )}
       </div>
-      {section === 'bank' ? (
+      {section === 'bank' ? bankBlock(book) : null}
+      {showIn ? (
         <section className="print-block">
-          {book.entries.length === 0 ? (
+          <h2>الوارد</h2>
+          {incoming.length === 0 ? <p>لا يوجد وارد في الفترة.</p> : rowsTable(incoming)}
+        </section>
+      ) : null}
+      {showOut ? (
+        <section className="print-block">
+          <h2>المنصرف</h2>
+          {outgoing.length === 0 ? <p>لا يوجد منصرف في الفترة.</p> : rowsTable(outgoing)}
+        </section>
+      ) : null}
+      {section === null && bankBook ? (
+        <>
+          <p className="print-section-total">بنك مصر — رصيد سابق: {formatMoney(bankBook.openingBalance)} · الوارد: {formatMoney(bankBook.totalIn)} · المنصرف: {formatMoney(bankBook.totalOut)} · الرصيد: {formatMoney(bankBook.balance)}</p>
+          {bankBlock(bankBook, 'بنك مصر')}
+        </>
+      ) : null}
+    </PrintChrome>
+  )
+
+  function bankBlock(bank: TreasuryBook, heading?: string) {
+    return (
+        <section className="print-block">
+          {heading ? <h2>{heading}</h2> : null}
+          {bank.entries.length === 0 ? (
             <p>لا توجد حركات في البنك في الفترة.</p>
           ) : (
             <table className="data-table">
@@ -523,7 +557,7 @@ export function PrintTreasuryPage() {
                 </tr>
               </thead>
               <tbody>
-                {book.entries.map((row) => (
+                {bank.entries.map((row) => (
                   <tr key={row.id}>
                     <td>{formatDate(row.occurredOn)}</td>
                     <td>{row.description}</td>
@@ -537,19 +571,94 @@ export function PrintTreasuryPage() {
             </table>
           )}
         </section>
-      ) : null}
-      {showIn ? (
-        <section className="print-block">
-          <h2>الوارد</h2>
-          {incoming.length === 0 ? <p>لا يوجد وارد في الفترة.</p> : rowsTable(incoming)}
-        </section>
-      ) : null}
-      {showOut ? (
-        <section className="print-block">
-          <h2>المنصرف</h2>
-          {outgoing.length === 0 ? <p>لا يوجد منصرف في الفترة.</p> : rowsTable(outgoing)}
-        </section>
-      ) : null}
+    )
+  }
+}
+
+export function PrintTreasuryPage() {
+  const section = new URLSearchParams(window.location.search).get('section')
+  return section === 'summary' ? <PrintTreasurySummary /> : <PrintTreasuryBook />
+}
+
+/** Totals per item for the period, cash box and Banque Misr each on their own. */
+function PrintTreasurySummary() {
+  const items = useTreasuryCategories()
+  const label = (code: string | null) => items.names.get(code ?? '') ?? printTreasuryCategoryLabel(code)
+  const params = new URLSearchParams(window.location.search)
+  const from = params.get('from') ?? undefined
+  const to = params.get('to') ?? undefined
+  const [books, setBooks] = useState<{ cash: TreasuryBook; bank: TreasuryBook } | null>(null)
+  const [company, setCompany] = useState<CompanySettings | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  useEffect(() => {
+    void Promise.all([fetchTreasury(from, to), fetchTreasury(from, to, undefined, 'bank'), fetchCompany()])
+      .then(([cash, bank, nextCompany]) => {
+        setBooks({ cash, bank })
+        setCompany(nextCompany)
+      })
+      .catch((err: unknown) => setError(err))
+  }, [from, to])
+  if (error) return <p className="banner error">تعذر تحميل الخزينة.</p>
+  if (!books || !company) return <p className="muted">جاري التحميل…</p>
+  const period = `الفترة: من ${from ? formatDate(from) : 'البداية'} إلى ${to ? formatDate(to) : 'اليوم'}`
+
+  function block(title: string, book: TreasuryBook) {
+    const rows = summarizeByItem(book.entries, label)
+    const totalIn = rows.reduce((sum, row) => sum + row.totalIn, 0)
+    const totalOut = rows.reduce((sum, row) => sum + row.totalOut, 0)
+    return (
+      <section className="print-block">
+        <h2>{title}</h2>
+        {rows.length === 0 ? (
+          <p>لا توجد حركات في الفترة.</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>البند</th>
+                <th>عدد الحركات</th>
+                <th>الوارد</th>
+                <th>المنصرف</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.code}>
+                  <td>{row.name}</td>
+                  <td>{row.count}</td>
+                  <td>{row.totalIn ? formatMoney(row.totalIn) : '—'}</td>
+                  <td>{row.totalOut ? formatMoney(row.totalOut) : '—'}</td>
+                </tr>
+              ))}
+              <tr className="print-total-row">
+                <td>الإجمالي</td>
+                <td>{book.entries.length}</td>
+                <td>{formatMoney(totalIn)}</td>
+                <td>{formatMoney(totalOut)}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <PrintChrome title="ملخص الخزينة حسب البند">
+      <header className="print-header">
+        {company.logoUrl ? <img src={company.logoUrl} alt="" className="print-logo" /> : null}
+        <div>
+          <h1>{company.companyName}</h1>
+          <h2>ملخص الخزينة حسب البند</h2>
+        </div>
+      </header>
+      <div className="print-meta">
+        <p>{period}</p>
+        <p>رصيد الخزينة: {formatMoney(books.cash.balance)}</p>
+        <p>رصيد بنك مصر: {formatMoney(books.bank.balance)}</p>
+      </div>
+      {block('الخزينة', books.cash)}
+      {block('بنك مصر', books.bank)}
     </PrintChrome>
   )
 }

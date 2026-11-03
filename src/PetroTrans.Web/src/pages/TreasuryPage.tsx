@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  changeTreasuryCategory,
   createBankTransfer,
   createTreasuryEntry,
   deleteTreasuryEntry,
   fetchTreasury,
-  type TreasuryAccount,
   type TreasuryBook,
   type TreasuryEntry,
 } from '../api/operations'
@@ -13,8 +13,6 @@ import { ConfirmDialog, EmptyState, ErrorBanner } from '../ui/Feedback'
 import { formatDate, formatMoney, parseAmount, todayIso } from '../ui/format'
 import {
   allTreasuryCategories,
-  bankIncomingCategories,
-  bankOutgoingCategories,
   incomingTreasuryCategories,
   isIncomingTreasuryFilter,
   isOutgoingTreasuryFilter,
@@ -23,8 +21,9 @@ import {
   treasuryCategoryLabel,
   useTreasuryCategories,
 } from '../ui/treasuryCategories'
+import { summarizeByItem } from '../ui/treasurySummary'
 
-type PrintSection = 'in' | 'out' | 'bank'
+type ShowSection = 'all' | 'in' | 'out' | 'bank' | 'summary'
 
 export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => void }) {
   const { t } = useLocale()
@@ -34,91 +33,99 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [show, setShow] = useState<ShowSection>('all')
   const [direction, setDirection] = useState<'in' | 'out'>('in')
-  const [category, setCategory] = useState('sales')
+  const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
   const [occurredOn, setOccurredOn] = useState(todayIso)
-  const [bankDirection, setBankDirection] = useState<'in' | 'out'>('in')
-  const [bankCategory, setBankCategory] = useState('bank_deposit')
-  const [bankDescription, setBankDescription] = useState('')
-  const [bankAmount, setBankAmount] = useState('')
-  const [bankOccurredOn, setBankOccurredOn] = useState(todayIso)
   const [error, setError] = useState<unknown>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<TreasuryEntry | null>(null)
 
   const items = useTreasuryCategories()
+  // One form for everything: bank deposits/withdrawals are ordinary items here, and bank-only
+  // items (bank fees) are listed under outgoing and go straight to the Banque Misr book.
+  const bankOnly = items.categories.filter((item) => item.isActive && item.direction === 'bank').map((item) => item.code)
   const managed = items.forDirection(direction).map((item) => item.code)
-  const categories: readonly string[] = managed.length ? managed : direction === 'in' ? incomingTreasuryCategories : outgoingTreasuryCategories
-  const bankCategories = bankDirection === 'in' ? bankIncomingCategories : bankOutgoingCategories
-  const filtered = Boolean(book?.filterCategory)
-  const filterItem = items.categories.find((item) => item.code === book?.filterCategory)
-  const showIncoming = filterItem ? filterItem.direction === 'in' || filterItem.direction === 'both' : isIncomingTreasuryFilter(book?.filterCategory)
-  const showOutgoing = filterItem ? filterItem.direction === 'out' || filterItem.direction === 'both' : isOutgoingTreasuryFilter(book?.filterCategory)
+  const categories: readonly string[] = managed.length
+    ? direction === 'out' ? [...managed.filter((code) => code !== 'other'), ...bankOnly, 'other'] : managed
+    : direction === 'in' ? incomingTreasuryCategories : outgoingTreasuryCategories
+  // A single item (e.g. car expenses) narrows the tables to that item. Bank-only items such as
+  // bank fees live in the Banque Misr book, so the filter goes there instead of the cash box.
+  const summary = show === 'summary'
+  const filterItem = items.categories.find((item) => item.code === filterCategory)
+  const itemIsBank = filterItem?.direction === 'bank'
+  const filtered = Boolean(filterCategory) && !summary
+  const matchesIn = !filtered || (filterItem ? filterItem.direction === 'in' || filterItem.direction === 'both' : isIncomingTreasuryFilter(filterCategory))
+  const matchesOut = !filtered || (filterItem ? filterItem.direction === 'out' || filterItem.direction === 'both' : isOutgoingTreasuryFilter(filterCategory))
+  const showIncoming = !summary && !itemIsBank && (show === 'all' || show === 'in') && matchesIn
+  const showOutgoing = !summary && !itemIsBank && (show === 'all' || show === 'out') && matchesOut
+  const showBank = !summary && (filtered ? itemIsBank : show === 'all' || show === 'bank')
   const incoming = book?.entries.filter((row) => row.direction === 'in') ?? []
   const outgoing = book?.entries.filter((row) => row.direction === 'out') ?? []
 
   async function refresh(range: { from: string; to: string } = { from, to }) {
+    const cashFilter = filtered && !itemIsBank ? filterCategory : undefined
+    const bankFilter = filtered && itemIsBank ? filterCategory : undefined
     const [cash, bank] = await Promise.all([
-      fetchTreasury(range.from || undefined, range.to || undefined, filterCategory || undefined),
-      fetchTreasury(range.from || undefined, range.to || undefined, undefined, 'bank'),
+      fetchTreasury(range.from || undefined, range.to || undefined, cashFilter),
+      fetchTreasury(range.from || undefined, range.to || undefined, bankFilter, 'bank'),
     ])
     setBook(cash)
     setBankBook(bank)
   }
 
+  // The tables follow the period, item and section as soon as they change, so the screen
+  // always matches what "print" will produce.
   useEffect(() => {
     void refresh().catch((err: unknown) => setError(err))
-  }, [])
+  }, [from, to, filterCategory, show, itemIsBank])
 
   function categoryLabel(code: string | null) {
     return items.names.get(code ?? '') ?? treasuryCategoryLabel(code, t.treasury)
   }
 
-  function printPath(section: PrintSection) {
+  function optionLabel(code: string) {
+    return bankOnly.includes(code) ? `${categoryLabel(code)} (${t.treasury.fromBank})` : categoryLabel(code)
+  }
+
+  // Prints exactly what is on screen: the chosen section, period and item.
+  function printPath() {
     const params = new URLSearchParams()
     if (from) params.set('from', from)
     if (to) params.set('to', to)
-    params.set('section', section)
-    if (filterCategory && section !== 'bank') params.set('category', filterCategory)
-    return `/print/treasury?${params.toString()}`
+    if (filtered && itemIsBank) params.set('section', 'bank')
+    else if (show !== 'all') params.set('section', show)
+    if (filtered) params.set('category', filterCategory)
+    const query = params.toString()
+    return `/print/treasury${query ? `?${query}` : ''}`
   }
 
-  async function save(account: TreasuryAccount, values: { occurredOn: string; direction: 'in' | 'out'; category: string; description: string; amount: string; notes: string }) {
-    const value = parseAmount(values.amount)
-    if (value == null) return false
+  // Cash movements typed by hand can be moved to another item; ones posted by payments or
+  // bank transfers keep theirs, because their item belongs to that document.
+  function editableItem(row: TreasuryEntry) {
+    return !row.linked && !row.isTransfer && (row.account ?? 'cash') === 'cash' && items.categories.length > 0
+  }
+
+  function itemChoices(row: TreasuryEntry) {
+    const direction = row.direction === 'in' ? 'in' : 'out'
+    return items.forDirection(direction).map((item) => item.code).filter((code) => !isTransferCategory(code))
+  }
+
+  async function onChangeItem(row: TreasuryEntry, next: string) {
+    if (!next || next === row.category) return
     setBusy(true)
     setError(null)
     setMessage('')
     try {
-      if (isTransferCategory(values.category)) {
-        await createBankTransfer({
-          occurredOn: values.occurredOn,
-          direction: values.category === 'bank_deposit' ? 'to_bank' : 'from_bank',
-          amount: value,
-          description: values.description.trim() || null,
-          notes: values.notes.trim() || null,
-        })
-        setMessage(t.treasury.transferSaved)
-      } else {
-        await createTreasuryEntry({
-          occurredOn: values.occurredOn,
-          direction: values.direction,
-          category: values.category || null,
-          description: values.description,
-          amount: value,
-          notes: values.notes.trim() || null,
-          account,
-        })
-      }
+      await changeTreasuryCategory(row.id, next)
+      setMessage(`${t.treasury.itemChanged}: ${row.description} ← ${categoryLabel(next)}`)
       await refresh()
-      return true
     } catch (err) {
       setError(err)
-      return false
     } finally {
       setBusy(false)
     }
@@ -126,27 +133,44 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
 
   async function onSave(event: FormEvent) {
     event.preventDefault()
-    const ok = await save('cash', { occurredOn, direction, category, description, amount, notes })
-    if (ok) {
+    const value = parseAmount(amount)
+    if (value == null) return
+    if (!category) {
+      setError(new Error(t.treasury.chooseItem))
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage('')
+    try {
+      if (isTransferCategory(category)) {
+        await createBankTransfer({
+          occurredOn,
+          direction: category === 'bank_deposit' ? 'to_bank' : 'from_bank',
+          amount: value,
+          description: description.trim() || null,
+          notes: notes.trim() || null,
+        })
+        setMessage(t.treasury.transferSaved)
+      } else {
+        await createTreasuryEntry({
+          occurredOn,
+          direction,
+          category: category || null,
+          description,
+          amount: value,
+          notes: notes.trim() || null,
+          account: bankOnly.includes(category) ? 'bank' : 'cash',
+        })
+      }
       setAmount('')
       setDescription('')
       setNotes('')
-    }
-  }
-
-  async function onSaveBank(event: FormEvent) {
-    event.preventDefault()
-    const ok = await save('bank', {
-      occurredOn: bankOccurredOn,
-      direction: bankDirection,
-      category: bankCategory,
-      description: bankDescription,
-      amount: bankAmount,
-      notes: '',
-    })
-    if (ok) {
-      setBankAmount('')
-      setBankDescription('')
+      await refresh()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -162,6 +186,58 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
     } finally {
       setBusy(false)
     }
+  }
+
+  // How much went in and out under each item for the chosen period; clicking a row opens that item.
+  function summaryTable(title: string, entries: TreasuryEntry[]) {
+    const rows = summarizeByItem(entries, categoryLabel)
+    const totalIn = rows.reduce((sum, row) => sum + row.totalIn, 0)
+    const totalOut = rows.reduce((sum, row) => sum + row.totalOut, 0)
+    return (
+      <section className="panel-card">
+        <h2 className="editor-title">{t.treasury.summaryByItem} — {title}</h2>
+        {rows.length === 0 ? (
+          <EmptyState title={t.treasury.emptySummary} />
+        ) : (
+          <div className="history-scroll">
+            <table className="data-table compact">
+              <thead>
+                <tr>
+                  <th>{t.treasury.category}</th>
+                  <th>{t.treasury.movements}</th>
+                  <th>{t.treasury.incoming}</th>
+                  <th>{t.treasury.outgoing}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.code}
+                    className="clickable"
+                    title={t.treasury.openItem}
+                    onClick={() => {
+                      setFilterCategory(row.code)
+                      setShow('all')
+                    }}
+                  >
+                    <td>{row.name}</td>
+                    <td>{row.count}</td>
+                    <td>{row.totalIn ? formatMoney(row.totalIn) : '—'}</td>
+                    <td>{row.totalOut ? formatMoney(row.totalOut) : '—'}</td>
+                  </tr>
+                ))}
+                <tr className="category-row">
+                  <td>{t.treasury.total}</td>
+                  <td>{entries.length}</td>
+                  <td>{formatMoney(totalIn)}</td>
+                  <td>{formatMoney(totalOut)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
   }
 
   function entryTable(rows: TreasuryEntry[], options: { showBalance?: boolean } = {}) {
@@ -191,7 +267,24 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
                 <td>{formatDate(row.occurredOn)}</td>
                 <td>{row.description}</td>
                 <td>
-                  {categoryLabel(row.category)}
+                  {editableItem(row) ? (
+                    <select
+                      className="inline-select"
+                      value={row.category ?? ''}
+                      disabled={busy}
+                      title={t.treasury.changeItem}
+                      onChange={(event) => void onChangeItem(row, event.target.value)}
+                    >
+                      {row.category && !itemChoices(row).includes(row.category) ? (
+                        <option value={row.category}>{categoryLabel(row.category)}</option>
+                      ) : null}
+                      {itemChoices(row).map((code) => (
+                        <option key={code} value={code}>{categoryLabel(code)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    categoryLabel(row.category)
+                  )}
                   {row.isTransfer ? <span className="muted"> · {t.treasury.transferTag}</span> : null}
                 </td>
                 {options.showBalance ? (
@@ -220,17 +313,6 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
     )
   }
 
-  function panelHead(title: string, section: PrintSection, label: string) {
-    return (
-      <div className="panel-head">
-        <h2 className="editor-title">{title}</h2>
-        <button type="button" className="btn-secondary" onClick={() => onNavigate(printPath(section))}>
-          {label}
-        </button>
-      </div>
-    )
-  }
-
   return (
     <section className="page">
       <div className="page-head">
@@ -245,8 +327,8 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
       <div className="profile-kpi-grid">
         {filtered ? (
           <div className="kpi-card">
-            <span className="kpi-label">{t.treasury.categoryTotal} — {categoryLabel(book?.filterCategory ?? null)}</span>
-            <span className="kpi-value">{formatMoney(book?.categoryTotal ?? 0)}</span>
+            <span className="kpi-label">{t.treasury.categoryTotal} — {categoryLabel(filterCategory)}</span>
+            <span className="kpi-value">{formatMoney((itemIsBank ? bankBook : book)?.categoryTotal ?? 0)}</span>
           </div>
         ) : (
           <>
@@ -266,74 +348,15 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
               <span className="kpi-label">{t.treasury.dailyBalance}</span>
               <span className="kpi-value">{formatMoney(book?.balance ?? 0)}</span>
             </div>
+            <div className="kpi-card">
+              <span className="kpi-label">{t.treasury.bankBalance}</span>
+              <span className="kpi-value">{formatMoney(bankBook?.balance ?? 0)}</span>
+            </div>
           </>
         )}
-        <div className="kpi-card">
-          <span className="kpi-label">{t.treasury.bankBalance}</span>
-          <span className="kpi-value">{formatMoney(bankBook?.balance ?? 0)}</span>
-        </div>
       </div>
 
-      <form
-        className="toolbar"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void refresh().catch((err: unknown) => setError(err))
-        }}
-      >
-        <label className="field">
-          <span>{t.treasury.from}</span>
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
-        </label>
-        <label className="field">
-          <span>{t.treasury.to}</span>
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
-        </label>
-        <label className="field">
-          <span>{t.treasury.category}</span>
-          <select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
-            <option value="">{t.treasury.allCategories}</option>
-            {items.categories.length ? (
-              <>
-                <optgroup label={t.treasury.incoming}>
-                  {items.categories.filter((item) => item.direction === 'in').map((item) => (
-                    <option key={item.code} value={item.code}>{item.name}</option>
-                  ))}
-                </optgroup>
-                <optgroup label={t.treasury.outgoing}>
-                  {items.categories.filter((item) => item.direction === 'out').map((item) => (
-                    <option key={item.code} value={item.code}>{item.name}</option>
-                  ))}
-                </optgroup>
-                <optgroup label={t.treasury.bankName}>
-                  {items.categories.filter((item) => item.direction === 'bank' || item.direction === 'both').map((item) => (
-                    <option key={item.code} value={item.code}>{item.name}</option>
-                  ))}
-                </optgroup>
-              </>
-            ) : (
-              allTreasuryCategories.map((item) => (
-                <option key={item} value={item}>{categoryLabel(item)}</option>
-              ))
-            )}
-          </select>
-        </label>
-        <button className="btn-secondary" type="submit">{t.treasury.show}</button>
-        {from || to ? (
-          <button
-            className="btn-ghost"
-            type="button"
-            onClick={() => {
-              setFrom('')
-              setTo('')
-              void refresh({ from: '', to: '' }).catch((err: unknown) => setError(err))
-            }}
-          >
-            {t.treasury.allPeriods}
-          </button>
-        ) : null}
-      </form>
-
+      {/* 1. Record a movement: one form for the cash box and Banque Misr. */}
       <form className="editor panel-card" onSubmit={(event) => void onSave(event)}>
         <h2 className="editor-title">{direction === 'in' ? t.treasury.addIn : t.treasury.addOut}</h2>
         <div className="form-grid">
@@ -348,7 +371,7 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
               onChange={(event) => {
                 const next = event.target.value === 'out' ? 'out' : 'in'
                 setDirection(next)
-                setCategory(items.forDirection(next)[0]?.code ?? (next === 'in' ? 'sales' : 'salaries'))
+                setCategory('')
               }}
             >
               <option value="in">{t.treasury.incoming}</option>
@@ -357,9 +380,11 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
           </label>
           <label className="field">
             <span>{t.treasury.category}</span>
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            {/* No item is picked for the user: a forgotten choice used to save movements as "salaries". */}
+            <select value={category} onChange={(event) => setCategory(event.target.value)} required>
+              <option value="" disabled>{t.treasury.chooseItem}</option>
               {categories.map((item) => (
-                <option key={item} value={item}>{categoryLabel(item)}</option>
+                <option key={item} value={item}>{optionLabel(item)}</option>
               ))}
             </select>
           </label>
@@ -368,6 +393,9 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
             <input value={amount} onChange={(event) => setAmount(event.target.value)} required />
           </label>
         </div>
+        {isTransferCategory(category) || bankOnly.includes(category) ? (
+          <p className="field-hint">{t.treasury.bankFormHint}</p>
+        ) : null}
         <label className="field">
           <span>{t.treasury.description}</span>
           <input
@@ -387,10 +415,92 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
         </button>
       </form>
 
+      {/* 2. Choose what to see and print, right above the tables. */}
+      <form
+        className="toolbar panel-card"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void refresh().catch((err: unknown) => setError(err))
+        }}
+      >
+        <label className="field">
+          <span>{t.treasury.showWhat}</span>
+          <select value={show} onChange={(event) => setShow(event.target.value as ShowSection)}>
+            <option value="all">{t.treasury.showAll}</option>
+            <option value="in">{t.treasury.incoming}</option>
+            <option value="out">{t.treasury.outgoing}</option>
+            <option value="bank">{t.treasury.bankName}</option>
+            <option value="summary">{t.treasury.summaryByItem}</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>{t.treasury.from}</span>
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </label>
+        <label className="field">
+          <span>{t.treasury.to}</span>
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        </label>
+        {summary || show === 'bank' ? null : (
+          <label className="field">
+            <span>{t.treasury.oneItem}</span>
+            <select value={filterCategory} onChange={(event) => setFilterCategory(event.target.value)}>
+              <option value="">{t.treasury.allCategories}</option>
+              {items.categories.length ? (
+                <>
+                  <optgroup label={t.treasury.incoming}>
+                    {items.categories.filter((item) => item.direction === 'in').map((item) => (
+                      <option key={item.code} value={item.code}>{item.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label={t.treasury.outgoing}>
+                    {items.categories.filter((item) => item.direction === 'out' || item.direction === 'both').map((item) => (
+                      <option key={item.code} value={item.code}>{item.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label={t.treasury.bankName}>
+                    {items.categories.filter((item) => item.direction === 'bank').map((item) => (
+                      <option key={item.code} value={item.code}>{item.name}</option>
+                    ))}
+                  </optgroup>
+                </>
+              ) : (
+                allTreasuryCategories.map((item) => (
+                  <option key={item} value={item}>{categoryLabel(item)}</option>
+                ))
+              )}
+            </select>
+          </label>
+        )}
+        {from || to ? (
+          <button
+            className="btn-ghost"
+            type="button"
+            onClick={() => {
+              setFrom('')
+              setTo('')
+            }}
+          >
+            {t.treasury.allPeriods}
+          </button>
+        ) : null}
+        <button type="button" className="btn-secondary" onClick={() => onNavigate(printPath())}>
+          {t.treasury.printShown}
+        </button>
+      </form>
+
+      {/* 3. The movements. */}
       <div className="treasury-split">
+        {summary ? (
+          <>
+            {summaryTable(t.treasury.cashBox, book?.entries ?? [])}
+            {summaryTable(t.treasury.bankName, bankBook?.entries ?? [])}
+          </>
+        ) : null}
+
         {showIncoming ? (
           <section className="panel-card">
-            {panelHead(t.treasury.incoming, 'in', t.treasury.printIn)}
+            <h2 className="editor-title">{t.treasury.incoming}</h2>
             {!book || incoming.length === 0 ? (
               <EmptyState title={filtered ? t.treasury.emptyCategory : t.treasury.emptyIncoming} />
             ) : (
@@ -401,7 +511,7 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
 
         {showOutgoing ? (
           <section className="panel-card">
-            {panelHead(t.treasury.outgoing, 'out', t.treasury.printOut)}
+            <h2 className="editor-title">{t.treasury.outgoing}</h2>
             {!book || outgoing.length === 0 ? (
               <EmptyState title={filtered ? t.treasury.emptyCategory : t.treasury.emptyOutgoing} />
             ) : (
@@ -410,75 +520,36 @@ export function TreasuryPage({ onNavigate }: { onNavigate: (path: string) => voi
           </section>
         ) : null}
 
-        <section className="panel-card">
-          {panelHead(t.treasury.bankName, 'bank', t.treasury.printBank)}
-          <p className="muted">{t.treasury.bankHint}</p>
-          <form className="editor" onSubmit={(event) => void onSaveBank(event)}>
-            <h3 className="editor-title">{t.treasury.addBank}</h3>
-            <div className="form-grid">
-              <label className="field">
-                <span>{t.sales.date}</span>
-                <input type="date" value={bankOccurredOn} onChange={(event) => setBankOccurredOn(event.target.value)} required />
-              </label>
-              <label className="field">
-                <span>{t.treasury.bankIn} / {t.treasury.bankOut}</span>
-                <select
-                  value={bankDirection}
-                  onChange={(event) => {
-                    const next = event.target.value === 'out' ? 'out' : 'in'
-                    setBankDirection(next)
-                    setBankCategory(next === 'in' ? 'bank_deposit' : 'bank_withdrawal')
-                  }}
-                >
-                  <option value="in">{t.treasury.bankIn}</option>
-                  <option value="out">{t.treasury.bankOut}</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>{t.treasury.category}</span>
-                <select value={bankCategory} onChange={(event) => setBankCategory(event.target.value)}>
-                  {bankCategories.map((item) => (
-                    <option key={item} value={item}>{categoryLabel(item)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>{t.sales.amount}</span>
-                <input value={bankAmount} onChange={(event) => setBankAmount(event.target.value)} required />
-              </label>
+        {showBank ? (
+          <section className="panel-card">
+            <h2 className="editor-title">{t.treasury.bankName}</h2>
+            {filtered ? null : (
+            <div className="profile-kpi-grid">
+              <div className="kpi-card">
+                <span className="kpi-label">{t.treasury.previousBalance}</span>
+                <span className="kpi-value">{formatMoney(bankBook?.openingBalance ?? 0)}</span>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">{t.treasury.bankIn}</span>
+                <span className="kpi-value">{formatMoney(bankBook?.totalIn ?? 0)}</span>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">{t.treasury.bankOut}</span>
+                <span className="kpi-value">{formatMoney(bankBook?.totalOut ?? 0)}</span>
+              </div>
+              <div className="kpi-card">
+                <span className="kpi-label">{t.treasury.bankBalance}</span>
+                <span className="kpi-value">{formatMoney(bankBook?.balance ?? 0)}</span>
+              </div>
             </div>
-            <label className="field">
-              <span>{t.treasury.description}</span>
-              <input value={bankDescription} onChange={(event) => setBankDescription(event.target.value)} required={!isTransferCategory(bankCategory)} />
-            </label>
-            <button className="primary-btn toolbar-btn" type="submit" disabled={busy}>
-              {busy ? t.loading : t.save}
-            </button>
-          </form>
-          <div className="profile-kpi-grid">
-            <div className="kpi-card">
-              <span className="kpi-label">{t.treasury.previousBalance}</span>
-              <span className="kpi-value">{formatMoney(bankBook?.openingBalance ?? 0)}</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">{t.treasury.bankIn}</span>
-              <span className="kpi-value">{formatMoney(bankBook?.totalIn ?? 0)}</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">{t.treasury.bankOut}</span>
-              <span className="kpi-value">{formatMoney(bankBook?.totalOut ?? 0)}</span>
-            </div>
-            <div className="kpi-card">
-              <span className="kpi-label">{t.treasury.bankBalance}</span>
-              <span className="kpi-value">{formatMoney(bankBook?.balance ?? 0)}</span>
-            </div>
-          </div>
-          {!bankBook || bankBook.entries.length === 0 ? (
-            <EmptyState title={t.treasury.emptyBank} />
-          ) : (
-            entryTable(bankBook.entries, { showBalance: true })
-          )}
-        </section>
+            )}
+            {!bankBook || bankBook.entries.length === 0 ? (
+              <EmptyState title={t.treasury.emptyBank} />
+            ) : (
+              entryTable(bankBook.entries, { showBalance: true })
+            )}
+          </section>
+        ) : null}
       </div>
 
       {deleteTarget ? (

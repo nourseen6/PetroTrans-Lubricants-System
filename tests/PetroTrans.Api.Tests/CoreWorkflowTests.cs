@@ -15,6 +15,116 @@ public class CoreWorkflowTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public async Task CustomerBalances_ListsOnlyNonZeroBalances_UnlessAllCustomersAsked()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        var invoice = await api.CreateInvoiceAsync(api.CustomerId, api.WarehouseId, api.VariantId, 1, 10m);
+        Assert.Equal(HttpStatusCode.OK, (await api.PostInvoiceAsync(invoice.Id)).Status);
+        var settled = await api.Client.PostAsJsonAsync("/api/customers", new
+        {
+            name = "عميل رصيده صفر",
+            customerTypeId = (Guid?)null,
+            contactPerson = "",
+            phone = "",
+            whatsApp = "",
+            address = ""
+        });
+        Assert.Equal(HttpStatusCode.Created, settled.StatusCode);
+
+        var withBalance = await api.Client.GetFromJsonAsync<ReportResponse>("/api/reports/customer-balances", Json);
+        var everyone = await api.Client.GetFromJsonAsync<ReportResponse>("/api/reports/customer-balances?allCustomers=true", Json);
+
+        var customerRows = withBalance!.Rows.Where(row => row[1] != "الإجمالي").ToList();
+        Assert.Equal(10m, decimal.Parse(Assert.Single(customerRows)[3]!, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.DoesNotContain(withBalance.Rows, row => row[1] == "عميل رصيده صفر");
+        Assert.Contains(everyone!.Rows, row => row[1] == "عميل رصيده صفر");
+    }
+
+    [Fact]
+    public async Task WrongItem_CanBeChangedToBalanceAdjustment_AndThenStopsCountingAsExpense()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        await api.LoginAsync("father", "father1");
+        var saved = await api.Client.PostAsJsonAsync("/api/treasury", new
+        {
+            occurredOn = "2026-09-07",
+            direction = "out",
+            category = "salaries",
+            description = "لتسويه الرصيد والبدايه",
+            amount = 117126m,
+            notes = (string?)null
+        });
+        var entry = (await saved.Content.ReadFromJsonAsync<TreasuryEntryResponse>(Json))!;
+        var before = await api.Client.GetFromJsonAsync<AnalyticsResponse>("/api/analytics?from=2026-09-01&to=2026-09-30", Json);
+        Assert.Equal(117126m, before!.Totals.Expenses);
+
+        var changed = await api.Client.PutAsJsonAsync($"/api/treasury/{entry.Id}/category", new { category = "balance_adjustment" });
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        var after = await api.Client.GetFromJsonAsync<AnalyticsResponse>("/api/analytics?from=2026-09-01&to=2026-09-30", Json);
+        Assert.Equal(0m, after!.Totals.Expenses);
+        Assert.Equal(-117126m, (await api.TreasuryAsync()).Balance);
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.Client.PutAsJsonAsync($"/api/treasury/{entry.Id}/category", new { category = "sales" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.Client.PutAsJsonAsync($"/api/treasury/{entry.Id}/category", new { category = "bank_deposit" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task Analytics_ProfitCountsOnlyRealExpenses_AndListsProductsCustomersAndUnsold()
+    {
+        await using var host = await TestHost.StartAsync();
+        var api = await WorkflowApi.ReadyAsync(host);
+        await api.LoginAsync("father", "father1");
+        Assert.Equal(HttpStatusCode.OK, (await api.Client.PutAsJsonAsync($"/api/pricing/purchase-price/{api.VariantId}", new { unitPrice = 6m, reason = (string?)null })).StatusCode);
+        var invoice = await api.CreateInvoiceAsync(api.CustomerId, api.WarehouseId, api.VariantId, 2, 10m, "2026-10-05");
+        Assert.Equal(HttpStatusCode.OK, (await api.PostInvoiceAsync(invoice.Id)).Status);
+
+        object Out(string category, decimal amount) => new
+        {
+            occurredOn = "2026-10-10",
+            direction = "out",
+            category,
+            description = category,
+            amount,
+            notes = (string?)null
+        };
+
+        // A real expense counts; a personal withdrawal and a bank deposit do not.
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury", Out("utilities", 3m))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury", Out("withdrawal", 100m))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await api.Client.PostAsJsonAsync("/api/treasury/transfer", new { occurredOn = "2026-10-11", direction = "to_bank", amount = 50m, description = (string?)null, notes = (string?)null })).StatusCode);
+        var unsoldProduct = await api.Client.PostAsJsonAsync("/api/products", new
+        {
+            name = "صنف لم يُبع",
+            brand = "",
+            category = "",
+            specification = "",
+            isActive = true,
+            imageRelativePath = (string?)null,
+            variants = new[] { new { packagingType = "جركن", packagingSize = "4", sku = (string?)null, barcode = (string?)null, minStock = (decimal?)null, standardWholesalePrice = 5m, isActive = true } }
+        });
+        Assert.Equal(HttpStatusCode.Created, unsoldProduct.StatusCode);
+
+        var result = await api.Client.GetFromJsonAsync<AnalyticsResponse>("/api/analytics?from=2026-10-01&to=2026-10-31", Json);
+
+        Assert.NotNull(result);
+        Assert.Equal(20m, result.Totals.Sales);
+        Assert.Equal(12m, result.Totals.Cost);
+        Assert.Equal(8m, result.Totals.GrossProfit);
+        Assert.Equal(3m, result.Totals.Expenses);
+        Assert.Equal(5m, result.Totals.NetProfit);
+        Assert.Equal(5m, Assert.Single(result.Months).NetProfit);
+        var product = Assert.Single(result.Products);
+        Assert.Equal(2m, product.Quantity);
+        Assert.Equal(8m, product.Profit);
+        Assert.Equal(1, product.Invoices);
+        Assert.Equal(20m, Assert.Single(result.Customers).Sales);
+        Assert.Contains(result.Unsold, x => x.Name == "صنف لم يُبع" && x.LastSold == null);
+        Assert.Equal("utilities", Assert.Single(result.Expenses).Code);
+    }
+
+    [Fact]
     public async Task BankTransferPayment_LandsInBankMisr_NotInCashBox()
     {
         await using var host = await TestHost.StartAsync();
@@ -1156,5 +1266,12 @@ public class CoreWorkflowTests
     private sealed record TreasuryRow(string Direction, decimal Amount, string? Category);
     private sealed record TreasuryEntryResponse(Guid Id, decimal Amount);
     private sealed record BankBookResponse(BankRow[] Entries);
+    private sealed record AnalyticsResponse(AnalyticsTotals Totals, AnalyticsMonth[] Months, AnalyticsProduct[] Products, AnalyticsUnsold[] Unsold, AnalyticsCustomer[] Customers, AnalyticsExpense[] Expenses);
+    private sealed record AnalyticsTotals(decimal Sales, decimal Cost, decimal GrossProfit, decimal Expenses, decimal NetProfit);
+    private sealed record AnalyticsMonth(decimal NetProfit);
+    private sealed record AnalyticsProduct(decimal Quantity, decimal? Profit, int Invoices);
+    private sealed record AnalyticsUnsold(string Name, DateTime? LastSold);
+    private sealed record AnalyticsCustomer(decimal Sales);
+    private sealed record AnalyticsExpense(string Code);
     private sealed record BankRow(Guid Id, decimal Amount, bool IsTransfer);
 }

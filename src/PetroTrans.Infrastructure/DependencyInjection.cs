@@ -45,6 +45,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISalesReturnService, SalesReturnService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ITreasuryService, TreasuryService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddSingleton<IAssistantProvider, LocalDeterministicAssistantProvider>();
         services.AddScoped<IAssistantService, AssistantService>();
         return services;

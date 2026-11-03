@@ -122,7 +122,7 @@ public sealed record ReturnableInvoiceDto(
 
 public sealed record AuditRowDto(Guid Id, DateTime OccurredAt, string? UserName, string Action, string? EntityType, Guid? EntityId, string? BeforeJson, string? AfterJson);
 
-public sealed record ReportFilters(DateTime? From, DateTime? To, Guid? CustomerId, Guid? SupplierId, Guid? VariantId, Guid? WarehouseId);
+public sealed record ReportFilters(DateTime? From, DateTime? To, Guid? CustomerId, Guid? SupplierId, Guid? VariantId, Guid? WarehouseId, bool AllCustomers = false);
 public sealed record ReportKpiDto(string Label, string Value, string? Hint = null);
 public sealed record ReportDto(
     string Title,
@@ -340,6 +340,7 @@ public sealed record SaveTreasuryCategoryRequest(string Name, string? Direction,
 public interface ITreasuryService
 {
     Task<IReadOnlyList<TreasuryCategoryDto>> ListCategoriesAsync(CancellationToken cancellationToken = default);
+    Task<OperationResult<TreasuryEntryDto>> ChangeCategoryAsync(Guid id, string? category, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<TreasuryCategoryDto>> CreateCategoryAsync(SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<OperationResult<TreasuryCategoryDto>> UpdateCategoryAsync(Guid id, SaveTreasuryCategoryRequest request, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<TreasuryBookDto> GetBookAsync(DateTime? from = null, DateTime? to = null, string? category = null, CancellationToken cancellationToken = default, string? account = null);

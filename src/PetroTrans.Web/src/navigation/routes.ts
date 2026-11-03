@@ -7,6 +7,7 @@ export type NavId =
   | 'inventory'
   | 'purchasing'
   | 'treasury'
+  | 'analytics'
   | 'reports'
   | 'assistant'
   | 'settings'
@@ -35,6 +36,7 @@ export const routes: { id: NavId; path: string }[] = [
   { id: 'inventory', path: '/inventory' },
   { id: 'purchasing', path: '/purchasing' },
   { id: 'treasury', path: '/treasury' },
+  { id: 'analytics', path: '/analytics' },
   { id: 'reports', path: '/reports' },
   { id: 'assistant', path: '/assistant' },
   { id: 'settings', path: '/settings' },
