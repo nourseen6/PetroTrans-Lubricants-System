@@ -60,7 +60,7 @@ cd src/PetroTrans.Web
 npm install
 npm run build
 cd ../..
-dotnet run --project src/PetroTrans.Desktop
+dotnet run --project src/PetroTrans.Desktop application
 ```
 
 ```powershell
